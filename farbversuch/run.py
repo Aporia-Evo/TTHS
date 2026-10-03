@@ -1,10 +1,12 @@
 """Ablauf pro Seed. Als einziges Modul kennt run.py die Einsatzbedingungen; Routine, Vorwärtsmodell und
-Monitor sehen nur Beobachtungen, Aktionen und Verschiebungen. Üben (Phase 1), Prämissen, p_global, Einsatz, CLI."""
+Monitor sehen nur Beobachtungen, Aktionen und Verschiebungen. Üben (Phase 1), Prämissen, p_global, Einsatz,
+sequentieller Ablauf (run_seed) und gestufter paralleler Treiber über Seeds und Bedingungen (CLI)."""
 import argparse
 import json
 import math
 import multiprocessing
 import os
+import pickle
 import platform
 import sys
 import time
@@ -171,8 +173,10 @@ def phase1(seed: int, cfg: Config) -> Phase1:
                                 max_alarms=cfg.max_null_alarms)
     cusum_k, cusum_h = calibrate_cusum(null_streams, sd_factor=cfg.cusum_sd_factor, max_alarms=cfg.max_null_alarms)
     deltas = _calibrate_deltas(seed, cfg, routine, null_buffers, practice)
-    return Phase1(routine, forward, class_counts, m3_threshold, cusum_k, cusum_h, p_obs, p_actions, p_disps,
-                  p_episodes, practice, deltas, time.perf_counter() - t0)
+    return Phase1(routine=routine, forward=forward, class_counts=class_counts, m3_threshold=m3_threshold,
+                  cusum_k=cusum_k, cusum_h=cusum_h, practice_obs=p_obs, practice_actions=p_actions,
+                  practice_disps=p_disps, practice_episodes=p_episodes, practice=practice, deltas=deltas,
+                  sec=time.perf_counter() - t0)
 
 
 def invariance_and_shift(seed: int, cfg: Config, routine: Routine) -> tuple[float, float]:
@@ -319,32 +323,64 @@ def _finite_or_none(x: float) -> float | None:
     return x if math.isfinite(x) else None
 
 
-def run_seed(seed: int, cfg: Config) -> dict:
+@dataclass
+class Prepared:
+    """Alles, was die Bedingungen eines Seeds gemeinsam brauchen (Ergebnis der Vorbereitung)."""
+    seed: int
+    config: dict                    # cfg.as_dict(): eine gespeicherte Vorbereitung gilt nur für dieselbe Konfiguration
+    p1: Phase1
+    premise: dict
+    p_global: dict | None           # None, wenn die Prämisse nicht erfüllt ist
+    sec: float                      # Vorbereitungszeit: Phase 1, Prämisse, p_global
+
+
+def prepare_seed(seed: int, cfg: Config) -> Prepared:
     t0 = time.perf_counter()
     _log(f"seed {seed} gestartet")
     p1 = phase1(seed, cfg)
     premise = premise_checks(seed, cfg, p1)
     _log(f"seed {seed} Phase 1 fertig ({p1.sec:.0f} s), Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'}")
+    p_global = find_p_global(seed, cfg, p1) if premise["ok"] else None
+    return Prepared(seed=int(seed), config=cfg.as_dict(), p1=p1, premise=premise, p_global=p_global,
+                    sec=time.perf_counter() - t0)
+
+
+def result_json(prep: Prepared, conditions: dict | None, cond_sec: dict[str, float]) -> dict:
+    """Ergebnis eines Seeds; conditions ist None bei nicht erfüllter Prämisse. total_sec = Vorbereitungszeit + Summe
+    der Bedingungszeiten (Festlegung 9), egal ob die Bedingungen nacheinander oder in getrennten Prozessen liefen."""
+    p1, premise = prep.p1, prep.premise
     # JSON kennt kein NaN/Infinity: ein nicht endlicher Restanteil oder eine nicht endliche Verschiebung steht als null
     json_premise = {**premise, "restanteil": _finite_or_none(premise["restanteil"]),
                     "shift": _finite_or_none(premise["shift"])}
-    result = {"seed": int(seed), "config": cfg.as_dict(), "env": env_block(), "premise": json_premise,
-              "calibration": {"m3_threshold": float(p1.m3_threshold), "cusum_k": float(p1.cusum_k),
-                              "cusum_h": float(p1.cusum_h)},
-              "practice": {name: [{"cand": c, "name": candidate_name(name.split("-")[1], c)} for c in cands]
-                           for name, cands in p1.practice.items()},
-              "delta": dict(p1.deltas),
-              "p_global": None, "conditions": None, "phase1_sec": float(p1.sec)}
-    if premise["ok"]:
-        result["p_global"] = find_p_global(seed, cfg, p1)
-        result["conditions"] = {}
+    return {"seed": int(prep.seed), "config": prep.config, "env": env_block(), "premise": json_premise,
+            "calibration": {"m3_threshold": float(p1.m3_threshold), "cusum_k": float(p1.cusum_k),
+                            "cusum_h": float(p1.cusum_h)},
+            "practice": {name: [{"cand": c, "name": candidate_name(name.split("-")[1], c)} for c in cands]
+                         for name, cands in p1.practice.items()},
+            "delta": dict(p1.deltas),
+            "p_global": prep.p_global, "conditions": conditions, "phase1_sec": float(p1.sec),
+            "total_sec": float(prep.sec + sum(cond_sec.values()))}
+
+
+def _deploy_timed(prep: Prepared, cfg: Config, condition: str) -> tuple[dict, float]:
+    t0 = time.perf_counter()
+    result = deploy(prep.seed, cfg, prep.p1, prep.p_global["p_global"], condition)
+    return result, time.perf_counter() - t0
+
+
+def run_seed(seed: int, cfg: Config) -> dict:
+    """Sequentielle Referenz: vorbereiten, die Bedingungen der Reihe nach, Ergebnis. main liefert je Seed dasselbe
+    (bis auf die _sec-Schlüssel), auch wenn es die Arbeit auf Prozesse verteilt."""
+    t0 = time.perf_counter()
+    prep = prepare_seed(seed, cfg)
+    conditions, cond_sec = None, {}
+    if prep.premise["ok"]:
+        conditions, cond_sec = {}, {}
         for c in CONDITIONS:
-            t1 = time.perf_counter()
-            result["conditions"][c] = deploy(seed, cfg, p1, result["p_global"]["p_global"], c)
+            conditions[c], cond_sec[c] = _deploy_timed(prep, cfg, c)
             now = time.perf_counter()
-            _log(f"seed {seed} Bedingung {c} fertig ({now - t1:.0f} s, seit Start {now - t0:.0f} s)")
-    result["total_sec"] = time.perf_counter() - t0
-    return result
+            _log(f"seed {seed} Bedingung {c} fertig ({cond_sec[c]:.0f} s, seit Start {now - t0:.0f} s)")
+    return result_json(prep, conditions, cond_sec)
 
 
 def duplicates(xs: Sequence[int]) -> list[int]:
@@ -367,21 +403,81 @@ def parse_seeds(s: str) -> list[int]:
     return seeds
 
 
-def _run_and_write(task: tuple[int, Config, str]) -> int:
-    """Worker (top-level, damit spawn ihn importiert). Atomar geschrieben: ein Abbruch hinterlässt keine Teildatei."""
-    seed, cfg, out = task
-    path = Path(out) / f"seed_{seed}.json"
+def _write_atomic(path: Path, data: str | bytes) -> None:
+    """Ein Abbruch hinterlässt keine Teildatei; die Prozess-ID im Namen verhindert Kollisionen zweier Prozesse."""
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(run_seed(seed, cfg), indent=2) + "\n")
+    if isinstance(data, bytes):
+        tmp.write_bytes(data)
+    else:
+        tmp.write_text(data)
     os.replace(tmp, path)
+
+
+def _load_prep(work: Path, seed: int) -> Prepared:
+    return pickle.loads((work / f"seed_{seed}.prep.pkl").read_bytes())
+
+
+# Die drei Stufen von main. Die Arbeiter sind top-level, damit spawn sie importieren kann; Zwischenstände liegen in
+# <out>/.work und werden nur bei gleicher Konfiguration wiederverwendet.
+def _prepare_job(task: tuple[int, Config, str]) -> tuple[int, bool]:
+    """Stufe 1: Vorbereitung eines Seeds als Pickle. Gibt (Seed, Prämisse erfüllt) zurück."""
+    seed, cfg, out = task
+    work = Path(out) / ".work"
+    work.mkdir(parents=True, exist_ok=True)
+    path = work / f"seed_{seed}.prep.pkl"
+    prep = _load_prep(work, seed) if path.exists() else None
+    if prep is not None and prep.config == cfg.as_dict():
+        _log(f"seed {seed} Vorbereitung übernommen")
+    else:
+        prep = prepare_seed(seed, cfg)
+        _write_atomic(path, pickle.dumps(prep))
+    return seed, bool(prep.premise["ok"])
+
+
+def _deploy_job(task: tuple[int, Config, str, str]) -> tuple[int, str]:
+    """Stufe 2: eine Bedingung eines Seeds; Monitor-Ergebnis und Laufzeit nach <out>/.work/seed_<n>.<condition>.json."""
+    seed, cfg, out, condition = task
+    work = Path(out) / ".work"
+    path = work / f"seed_{seed}.{condition}.json"
+    if path.exists() and json.loads(path.read_text()).get("config") == cfg.as_dict():
+        _log(f"seed {seed} Bedingung {condition} übernommen")
+    else:
+        result, sec = _deploy_timed(_load_prep(work, seed), cfg, condition)
+        _write_atomic(path, json.dumps({"config": cfg.as_dict(), "result": result, "sec": sec}))
+        _log(f"seed {seed} Bedingung {condition} fertig ({sec:.0f} s)")
+    return seed, condition
+
+
+def _finish_job(task: tuple[int, Config, str]) -> int:
+    """Stufe 3: seed_<n>.json atomar schreiben, danach die .work-Dateien dieses Seeds löschen."""
+    seed, cfg, out = task
+    work = Path(out) / ".work"
+    prep = _load_prep(work, seed)
+    conditions, cond_sec = None, {}
+    if prep.premise["ok"]:
+        stored = {c: json.loads((work / f"seed_{seed}.{c}.json").read_text()) for c in CONDITIONS}
+        conditions = {c: stored[c]["result"] for c in CONDITIONS}
+        cond_sec = {c: stored[c]["sec"] for c in CONDITIONS}
+    result = result_json(prep, conditions, cond_sec)
+    _write_atomic(Path(out) / f"seed_{seed}.json", json.dumps(result, indent=2) + "\n")
+    for f in work.glob(f"seed_{seed}.*"):
+        f.unlink(missing_ok=True)
     return seed
+
+
+def _stage(fn: Callable, tasks: Sequence, jobs: int) -> Iterator:
+    """Eine Stufe in einem frisch gestarteten Pool (auch bei jobs = 1); Ergebnisse in Fertigstellungsreihenfolge."""
+    if tasks:
+        with multiprocessing.get_context("spawn").Pool(max(1, jobs)) as pool:
+            yield from pool.imap_unordered(fn, tasks)
 
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m farbversuch.run", description="Farbversuch: Seeds ausführen")
     ap.add_argument("--seeds", required=True, help='z. B. "400-409", "0" oder "1,5"')
     ap.add_argument("--out", required=True,
-                    help="Ausgabeordner für seed_<n>.json (Vorhandenes mit gleicher Konfiguration wird übersprungen)")
+                    help="Ausgabeordner für seed_<n>.json (Vorhandenes mit gleicher Konfiguration wird übersprungen; "
+                         "Zwischenstände liegen in <out>/.work)")
     ap.add_argument("--config", default=None, help="Konfigurations-JSON (Standard: Config())")
     ap.add_argument("--jobs", type=int, default=1)
     args = ap.parse_args(argv)
@@ -395,7 +491,7 @@ def main(argv: list[str] | None = None) -> None:
     for s in parse_seeds(args.seeds):
         path = out / f"seed_{s}.json"
         if not path.exists():
-            todo.append((s, cfg, str(out)))
+            todo.append(s)
         elif json.loads(path.read_text()).get("config") == cfg.as_dict():
             skipped.append(s)
         else:
@@ -405,10 +501,13 @@ def main(argv: list[str] | None = None) -> None:
                          "überschrieben: " + ", ".join(foreign))
     for s in skipped:
         print(f"seed {s} übersprungen (vorhanden)", file=sys.stderr, flush=True)
-    if todo:                                     # auch --jobs 1 läuft in einem frisch gestarteten Worker
-        with multiprocessing.get_context("spawn").Pool(max(1, args.jobs)) as pool:
-            for seed in pool.imap_unordered(_run_and_write, todo):
-                print(f"seed {seed} fertig", flush=True)
+    tasks = [(s, cfg, str(out)) for s in todo]
+    premise_ok = dict(_stage(_prepare_job, tasks, args.jobs))                    # Stufe 1: Vorbereitung je Seed
+    deploy_tasks = [(s, cfg, str(out), c) for s in todo if premise_ok[s] for c in CONDITIONS]
+    for _ in _stage(_deploy_job, deploy_tasks, args.jobs):                       # Stufe 2: je Seed und Bedingung
+        pass
+    for seed in _stage(_finish_job, tasks, args.jobs):                           # Stufe 3: Ergebnis je Seed
+        print(f"seed {seed} fertig", flush=True)
 
 
 if __name__ == "__main__":

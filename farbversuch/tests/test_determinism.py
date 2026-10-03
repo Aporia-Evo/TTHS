@@ -1,13 +1,7 @@
 import pytest
 
 from farbversuch.run import run_seed
-from farbversuch.tests.helpers import TINY
-
-
-def strip_sec(x):
-    if isinstance(x, dict): return {k: strip_sec(v) for k, v in x.items() if not k.endswith("_sec")}
-    if isinstance(x, list): return [strip_sec(v) for v in x]
-    return x
+from farbversuch.tests.helpers import TINY, strip_sec
 
 
 @pytest.mark.slow

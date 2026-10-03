@@ -17,3 +17,10 @@ TINY = Config(n_teacher_episodes=300, epochs=200, n_forward_episodes=150, n_null
               n_invariance_maps=20, min_invariance=0.0, n_premise_fwd_episodes=30, n_pglobal_episodes=30,
               pglobal_max_iter=8, n_deploy_episodes=60, switch_episode=20, buffer_size=400, notice_window=100,
               n_perm=200, n_perm_A=400, max_restanteil=1.0, max_shift=10.0, systems=("M3-B", "S1-B", "S1-A"))
+
+
+def strip_sec(x):
+    """Wandzeiten (Schlüssel auf _sec) entfernen; alles andere muss zwischen Läufen gleich sein."""
+    if isinstance(x, dict): return {k: strip_sec(v) for k, v in x.items() if not k.endswith("_sec")}
+    if isinstance(x, list): return [strip_sec(v) for v in x]
+    return x

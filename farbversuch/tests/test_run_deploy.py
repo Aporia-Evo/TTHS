@@ -1,6 +1,8 @@
 import dataclasses
 import json
+import multiprocessing
 import os
+import pickle
 import platform
 import re
 from types import SimpleNamespace
@@ -10,9 +12,9 @@ import pytest
 
 import farbversuch.monitor as monitor
 import farbversuch.run as run
-from farbversuch.run import (CONDITIONS, THREAD_VARS, bisect_to_target, deploy, env_block, find_p_global, main,
-                             parse_seeds, run_seed, stream_episodes)
-from farbversuch.tests.helpers import TINY
+from farbversuch.run import (CONDITIONS, THREAD_VARS, Prepared, bisect_to_target, deploy, env_block, find_p_global,
+                             main, parse_seeds, prepare_seed, result_json, run_seed, stream_episodes)
+from farbversuch.tests.helpers import TINY, strip_sec
 
 
 def test_bisect_hits_target():
@@ -107,17 +109,18 @@ def test_cli_rejects_duplicate_seeds_before_running_anything(tmp_path, monkeypat
     assert not list((tmp_path / "o").glob("*"))
 
 
-def test_worker_temp_file_name_includes_the_process_id(tmp_path, monkeypatch):
+def test_atomic_write_temp_file_name_includes_the_process_id(tmp_path, monkeypatch):
     seen = []
     real_replace = os.replace
-    monkeypatch.setattr(run, "run_seed", lambda seed, cfg: {"seed": seed})
     monkeypatch.setattr(os, "replace", lambda src, dst: (seen.append(os.path.basename(src)), real_replace(src, dst)))
-    for pid in (1111, 2222):                      # zwei Prozesse mit demselben Seed kollidieren nicht auf einer Datei
+    for pid in (1111, 2222):                      # zwei Prozesse mit demselben Ziel kollidieren nicht auf einer Datei
         monkeypatch.setattr(os, "getpid", lambda pid=pid: pid)
-        assert run._run_and_write((5, TINY, str(tmp_path))) == 5
-    assert seen == ["seed_5.json.1111.tmp", "seed_5.json.2222.tmp"]
-    assert sorted(x.name for x in tmp_path.iterdir()) == ["seed_5.json"]          # nichts bleibt liegen
+        run._write_atomic(tmp_path / "seed_5.json", json.dumps({"seed": 5}))
+    run._write_atomic(tmp_path / "x.bin", b"\x00\x01")
+    assert seen == ["seed_5.json.1111.tmp", "seed_5.json.2222.tmp", "x.bin.2222.tmp"]
+    assert sorted(x.name for x in tmp_path.iterdir()) == ["seed_5.json", "x.bin"]          # nichts bleibt liegen
     assert json.loads((tmp_path / "seed_5.json").read_text()) == {"seed": 5}
+    assert (tmp_path / "x.bin").read_bytes() == b"\x00\x01"
 
 
 @pytest.mark.slow
@@ -301,3 +304,154 @@ def test_cli_parallel_matches_serial(tmp_path, monkeypatch):
         return {k: strip(v) for k, v in x.items() if not k.endswith("_sec")} if isinstance(x, dict) else x
     par, ser = (json.loads((tmp_path / d / "seed_1.json").read_text()) for d in ("par", "ser"))
     assert strip(par) == strip(ser)
+
+
+def _in_fresh_process(monkeypatch, fn, *args):
+    """fn(*args) in einem frischen Prozess mit festen BLAS-Threads, wie die Worker von main. Im Testprozess ist numpy
+    schon geladen, seine Threadzahl lässt sich nicht mehr ändern und verschiebt die Gleitkommareihenfolge (Abweichung
+    ab der sechsten Stelle); ein Vergleich mit Rechnung im Testprozess hinge von dessen Threads ab."""
+    for k in THREAD_VARS:
+        monkeypatch.setenv(k, "1")
+    with multiprocessing.get_context("spawn").Pool(1) as pool:
+        return pool.apply(fn, args)
+
+
+def _sequential_reference(seed, cfg, monkeypatch):
+    return json.loads(json.dumps(_in_fresh_process(monkeypatch, run_seed, seed, cfg)))
+
+
+@pytest.mark.slow
+def test_staged_equals_sequential(tmp_path, monkeypatch):
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o"), "--jobs", "3"])
+    staged = json.loads((tmp_path / "o" / "seed_0.json").read_text())
+    assert strip_sec(staged) == strip_sec(_sequential_reference(0, TINY, monkeypatch))
+    assert not any((tmp_path / "o" / ".work").glob("seed_0.*"))
+
+
+@pytest.mark.slow
+def test_staged_premise_failure(tmp_path):                     # Review Focus 5
+    cfg = tmp_path / "c.json"; dataclasses.replace(TINY, min_invariance=1.01).to_json(cfg)
+    main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o"), "--jobs", "2"])
+    r = json.loads((tmp_path / "o" / "seed_0.json").read_text())
+    assert r["premise"]["ok"] is False and r["conditions"] is None
+    assert r["p_global"] is None and not any((tmp_path / "o" / ".work").glob("seed_0.*"))
+
+
+@pytest.mark.slow
+def test_stale_prep_is_not_reused(tmp_path):                    # Review Focus 4
+    work = tmp_path / "o" / ".work"; work.mkdir(parents=True)
+    stale = prepare_seed(0, dataclasses.replace(TINY, epochs=5))
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(stale))
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o"), "--jobs", "2"])
+    assert json.loads((tmp_path / "o" / "seed_0.json").read_text())["config"] == TINY.as_dict()
+
+
+@pytest.mark.slow
+def test_staged_run_resumes_from_partial_work_files(tmp_path, monkeypatch):
+    out = tmp_path / "o"; (out / ".work").mkdir(parents=True)
+    # Stufe 1 und ein Teil von Stufe 2 liegen schon da
+    assert _in_fresh_process(monkeypatch, run._prepare_job, (0, TINY, str(out))) == (0, True)
+    _in_fresh_process(monkeypatch, run._deploy_job, (0, TINY, str(out), "red"))
+    assert sorted(x.name for x in (out / ".work").iterdir()) == ["seed_0.prep.pkl", "seed_0.red.json"]
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    main(["--config", str(cfg), "--seeds", "0", "--out", str(out), "--jobs", "2"])
+    staged = json.loads((out / "seed_0.json").read_text())
+    assert strip_sec(staged) == strip_sec(_sequential_reference(0, TINY, monkeypatch))
+    assert not any((out / ".work").glob("seed_0.*"))
+
+
+def _stub_prep(cfg=TINY, ok=True, seed=0):
+    """Prepared mit Attrappen, die sich pickeln lassen (SimpleNamespace statt echter Phase 1)."""
+    p1 = SimpleNamespace(m3_threshold=1., cusum_k=2., cusum_h=3., practice={"M3-B": [1, 4]}, deltas={"M3-B": .5},
+                         sec=2.)
+    premise = {"ok": ok, "color_invariance": 1., "fwd_surprise": 1., "freq_surprise": 2.,
+               "restanteil": float("nan"), "shift": .1}
+    return Prepared(seed=seed, config=cfg.as_dict(), p1=p1, premise=premise,
+                    p_global={"p_global": .4} if ok else None, sec=3.)
+
+
+def test_total_sec_is_preparation_plus_the_condition_times():       # Festlegung 9
+    prep = _stub_prep()
+    r = result_json(prep, {"none": {}, "red": {}}, {"none": 1.5, "red": 2.})
+    assert r["total_sec"] == prep.sec + 3.5 and r["phase1_sec"] == prep.p1.sec
+    assert r["premise"]["restanteil"] is None and r["premise"]["shift"] == .1       # nan wird zu null
+    assert r["practice"]["M3-B"][0]["cand"] == 1 and r["delta"] == {"M3-B": .5}
+    failed = result_json(_stub_prep(ok=False), None, {})
+    assert failed["conditions"] is None and failed["p_global"] is None and failed["total_sec"] == 3.
+    assert json.loads(json.dumps(r, allow_nan=False)) == r
+
+
+def test_prepare_job_reuses_a_pickle_with_the_same_config(tmp_path, monkeypatch):
+    work = tmp_path / ".work"; work.mkdir()
+    f = work / "seed_0.prep.pkl"; f.write_bytes(pickle.dumps(_stub_prep()))
+    before = (f.read_bytes(), f.stat().st_mtime_ns)
+    monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: pytest.fail("darf nicht neu rechnen"))
+    assert run._prepare_job((0, TINY, str(tmp_path))) == (0, True)
+    assert (f.read_bytes(), f.stat().st_mtime_ns) == before
+
+
+def test_prepare_job_recomputes_a_pickle_with_another_config(tmp_path, monkeypatch):
+    work = tmp_path / ".work"; work.mkdir()
+    f = work / "seed_0.prep.pkl"; f.write_bytes(pickle.dumps(_stub_prep(dataclasses.replace(TINY, epochs=5))))
+    monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: _stub_prep(cfg, ok=False, seed=seed))
+    assert run._prepare_job((0, TINY, str(tmp_path))) == (0, False)
+    assert pickle.loads(f.read_bytes()).config == TINY.as_dict()
+    assert sorted(x.name for x in work.iterdir()) == ["seed_0.prep.pkl"]          # keine Temp-Datei übrig
+
+
+def test_prepare_job_creates_the_work_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: _stub_prep(cfg, seed=seed))
+    assert run._prepare_job((0, TINY, str(tmp_path / "o"))) == (0, True)
+    assert (tmp_path / "o" / ".work" / "seed_0.prep.pkl").exists()
+
+
+def test_deploy_job_reuses_a_condition_file_with_the_same_config_only(tmp_path, monkeypatch):
+    work = tmp_path / ".work"; work.mkdir()
+    f = work / "seed_0.red.json"
+    monkeypatch.setattr(run, "deploy",
+                        lambda seed, cfg, p1, p_global, condition: {"fresh": [seed, p_global, condition]})
+    f.write_text(json.dumps({"config": TINY.as_dict(), "result": {"kept": 1}, "sec": 7.}))
+    run._deploy_job((0, TINY, str(tmp_path), "red"))              # ohne Prep-Pickle: sie wird nicht einmal geladen
+    assert json.loads(f.read_text()) == {"config": TINY.as_dict(), "result": {"kept": 1}, "sec": 7.}
+    f.write_text(json.dumps({"config": {**TINY.as_dict(), "k": 99}, "result": {"kept": 1}, "sec": 7.}))
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(_stub_prep()))
+    run._deploy_job((0, TINY, str(tmp_path), "red"))
+    got = json.loads(f.read_text())
+    assert got["config"] == TINY.as_dict() and got["result"] == {"fresh": [0, .4, "red"]} and got["sec"] >= 0
+    assert sorted(x.name for x in work.iterdir()) == ["seed_0.prep.pkl", "seed_0.red.json"]
+
+
+def test_finish_job_writes_the_result_and_removes_only_this_seeds_work_files(tmp_path):
+    work = tmp_path / ".work"; work.mkdir()
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(_stub_prep()))
+    for c, sec in zip(reversed(CONDITIONS), (1., 2., 3., 4.)):
+        (work / f"seed_0.{c}.json").write_text(json.dumps({"config": TINY.as_dict(), "result": {"c": c}, "sec": sec}))
+    (work / "seed_0.prep.pkl.99.tmp").write_bytes(b"")                       # liegengebliebene Temp-Datei
+    others = ["seed_10.prep.pkl", "seed_1.prep.pkl", "seed_10.red.json"]
+    for name in others:
+        (work / name).write_bytes(b"")
+    assert run._finish_job((0, TINY, str(tmp_path))) == 0
+    r = json.loads((tmp_path / "seed_0.json").read_text())
+    assert list(r["conditions"]) == list(CONDITIONS) and r["conditions"]["red"] == {"c": "red"}
+    assert r["total_sec"] == 3. + 10.
+    assert sorted(x.name for x in work.iterdir()) == sorted(others)
+    assert sorted(x.name for x in tmp_path.iterdir() if x.name != ".work") == ["seed_0.json"]
+
+
+def test_finish_job_without_conditions_for_a_failed_premise(tmp_path):
+    work = tmp_path / ".work"; work.mkdir()
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(_stub_prep(ok=False)))
+    run._finish_job((0, TINY, str(tmp_path)))
+    r = json.loads((tmp_path / "seed_0.json").read_text())
+    assert r["conditions"] is None and r["p_global"] is None and r["total_sec"] == 3.
+    assert list(work.iterdir()) == []
+
+
+def test_main_runs_no_pool_when_every_seed_is_done(tmp_path, monkeypatch):
+    _seed_file(tmp_path / "o", 0, TINY.as_dict())
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    monkeypatch.setattr(run.multiprocessing, "get_context", lambda *a: pytest.fail("kein Pool nötig"))
+    main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o")])
+    assert sorted(x.name for x in (tmp_path / "o").iterdir()) == ["seed_0.json"]
