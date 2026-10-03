@@ -48,4 +48,4 @@ Pilot auf Seed 0 (nur Fehlersuche und P1, nur Trainings-Hyperparameter, Puffergr
 - Code: `farbversuch/`.
 - Spezifikation: `docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-design.md`
 - Plan: `docs/superpowers/plans/2026-10-03-farb-wiederoeffnung.md`
-- Übergabe an die nächste Sitzung: `docs/HANDOVER.md`
+- Übergabe an die nächste Sitzung: `docs/HANDOVER.md` (dort auch die Abweichungen vom Plan)
