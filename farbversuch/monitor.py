@@ -1,4 +1,7 @@
-"""Monitor: Ringpuffer und Kandidatenmerkmale (Arm A: Beobachtungsbit UND Aktion, Arm B: Zielzelle der Aktion)."""
+"""Monitor: Ringpuffer, Kandidatenmerkmale (Arm A: Beobachtungsbit UND Aktion, Arm B: Zielzelle der Aktion),
+Bemerken (M3, CUSUM) und Kalibrierung an Null-Strömen."""
+from collections.abc import Sequence
+
 import numpy as np
 
 from farbversuch.world import CH_COLOR, CH_GOAL, CH_WALL, DELTAS, N_ACTIONS, OBS_DIM, obs_index
@@ -69,3 +72,53 @@ def candidate_name(arm: str, c: int) -> str:
     if arm == "A":
         return f"bit{c % OBS_DIM}&a{c // OBS_DIM}"
     raise ValueError(f"unbekannter Arm: {arm!r}")
+
+
+def null_threshold(null_maxima: Sequence[float], max_alarms: int = 1) -> float:
+    """(max_alarms+1)-größter Wert: höchstens `max_alarms` Null-Ströme liegen darüber (Alarm = Wert > Schwelle)."""
+    if len(null_maxima) <= max_alarms:
+        raise ValueError(f"brauche mehr als {max_alarms} Null-Maxima, habe {len(null_maxima)}")
+    return float(sorted(null_maxima, reverse=True)[max_alarms])
+
+
+def m3_trace(episodes: Sequence[np.ndarray], window: int = 500, interval: int = 10) -> list[tuple[int, float]]:
+    """(E, Mittel der letzten `window` Überraschungen) nach jeder `interval`-ten Episode mit >= window Schritten."""
+    ends = np.cumsum([len(e) for e in episodes])
+    steps = np.concatenate(episodes) if len(episodes) else np.zeros(0)
+    csum = np.concatenate([[0.], np.cumsum(steps)])
+    trace = []
+    for E in range(interval, len(episodes) + 1, interval):
+        n = int(ends[E - 1])
+        if n >= window:
+            trace.append((E, float((csum[n] - csum[n - window]) / window)))
+    return trace
+
+
+def calibrate_m3(null_streams: Sequence[Sequence[np.ndarray]], window: int = 500, interval: int = 10,
+                 max_alarms: int = 1) -> float:
+    """M3-Schwelle aus den Maxima der Null-Ströme; ein Strom ohne Prüfpunkt zählt als -inf."""
+    maxima = []
+    for episodes in null_streams:
+        trace = m3_trace(episodes, window, interval)
+        maxima.append(max(v for _, v in trace) if trace else -np.inf)
+    return null_threshold(maxima, max_alarms)
+
+
+def cusum_trace(s: np.ndarray, k: float) -> np.ndarray:
+    """S_t = max(0, S_{t-1} + s_t - k), S_0 = 0."""
+    out = np.zeros(len(s))
+    acc = 0.
+    for t, x in enumerate(s):
+        acc = max(0., acc + x - k)
+        out[t] = acc
+    return out
+
+
+def calibrate_cusum(null_streams: Sequence[Sequence[np.ndarray]], sd_factor: float = 0.5,
+                    max_alarms: int = 1) -> tuple[float, float]:
+    """(k, h): k = Mittel + sd_factor * Std (ddof=0) aller gepoolten Null-Schritte, h aus den Strom-Maxima."""
+    streams = [np.concatenate(episodes) for episodes in null_streams]
+    pooled = np.concatenate(streams)
+    k = float(pooled.mean() + sd_factor * pooled.std())
+    h = null_threshold([cusum_trace(s, k).max() for s in streams], max_alarms)
+    return k, h
