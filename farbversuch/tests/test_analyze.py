@@ -41,6 +41,27 @@ def test_prechange_alarm_in_red():               # Review Focus 4
     assert m["false_alarm"] and m["notice_latency"] is None and m["correct"] and m["attr_latency"] == 20
 
 
+def test_preswitch_opening_in_red_is_a_misattribution():
+    # vor dem Wechsel sind alle vier Ströme gleich: eine frühe Öffnung kann keine Erkennung der roten Änderung sein
+    m = stream_metrics(sysres(60, [(C_SPECIAL, 70)]), "red", "B", 100, 300)
+    assert (m["correct"], m["attr_latency"], m["misattr"], m["n_opened"]) == (False, 300, 1, 1)
+    # bei E = switch ist noch keine rote Episode abgeschlossen; E = switch + 1 ist die erste mögliche richtige
+    assert not stream_metrics(sysres(80, [(C_SPECIAL, 100)]), "red", "B", 100, 300)["correct"]
+    m = stream_metrics(sysres(80, [(C_SPECIAL, 101)]), "red", "B", 100, 300)
+    assert m["correct"] and m["attr_latency"] == 1 and m["misattr"] == 0
+    m = stream_metrics(sysres(60, [(C_SPECIAL, 70), (C_SPECIAL, 120)]), "red", "B", 100, 300)
+    assert (m["correct"], m["attr_latency"], m["misattr"]) == (True, 20, 1)
+    m = stream_metrics(sysres(60, [(A_RED, 70)]), "red", "A", 100, 300)
+    assert (m["correct"], m["attr_latency"], m["misattr"]) == (False, 300, 1)
+
+
+def test_preswitch_correct_opening_does_not_count_for_p2():
+    seeds = list(range(400, 410))
+    results = [fake_result(s) for s in seeds]
+    sys_variant(results[0], "M3-B", "red", sysres(60, [(C_SPECIAL, 70)]))
+    assert evaluate(results, seeds)["P2"]["count"] == 9
+
+
 def test_misattribution_rules():
     assert stream_metrics(sysres(110, [(2, 120), (4, 130)]), "global", "B", 100, 300)["misattr"] == 1
     assert stream_metrics(sysres(110, [(4, 120), (C_SPECIAL, 130)]), "red", "B", 100, 300)["misattr"] == 1
@@ -77,9 +98,9 @@ def test_colour_features_and_arm_a_misattribution():
     assert m["correct"] and m["attr_latency"] == 30 and m["misattr"] == 2 and m["n_opened"] == 3
 
 
-def test_correct_opening_before_switch_has_zero_latency_and_none_gives_horizon():
+def test_opening_before_switch_is_not_correct_and_none_gives_horizon():
     m = stream_metrics(sysres(80, [(C_SPECIAL, 90)]), "red", "B", 100, 300)
-    assert m["attr_latency"] == 0 and m["correct"]
+    assert m["attr_latency"] == 300 and not m["correct"] and m["misattr"] == 1
     m = stream_metrics(sysres(110, [(4, 120)]), "red", "B", 100, 300)
     assert not m["correct"] and m["attr_latency"] == 300
     m = stream_metrics(sysres(110, [(C_SPECIAL, 150), (C_SPECIAL, 130)]), "red", "B", 100, 300)

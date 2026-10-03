@@ -38,10 +38,11 @@ def stream_metrics(res: dict, condition: str, arm: str, switch: int, horizon: in
         false_alarm, notice_latency = False, noticed - switch
     opened = res["opened"]
     if condition == "red":
-        hits = [o["episode"] for o in opened if is_correct(arm, o["cand"])]
+        # richtig nur nach dem Wechsel (E > switch): davor sind alle Ströme gleich, eine Öffnung ist keine Erkennung
+        hits = [o["episode"] for o in opened if o["episode"] > switch and is_correct(arm, o["cand"])]
         correct = bool(hits)
-        attr_latency = max(0, min(hits) - switch) if hits else horizon
-        misattr = sum(not is_correct(arm, o["cand"]) for o in opened)
+        attr_latency = min(hits) - switch if hits else horizon
+        misattr = len(opened) - len(hits)
     else:
         correct, attr_latency = None, None
         misattr = sum(is_colour(arm, o["cand"]) for o in opened)
