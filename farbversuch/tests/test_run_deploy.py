@@ -5,6 +5,7 @@ import os
 import pickle
 import platform
 import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -362,14 +363,14 @@ def test_staged_run_resumes_from_partial_work_files(tmp_path, monkeypatch):
     assert not any((out / ".work").glob("seed_0.*"))
 
 
-def _stub_prep(cfg=TINY, ok=True, seed=0):
-    """Prepared mit Attrappen, die sich pickeln lassen (SimpleNamespace statt echter Phase 1)."""
+def _stub_prep(cfg=TINY, ok=True, seed=0, fingerprint=None):
+    """Prepared mit Attrappen, die sich pickeln lassen (SimpleNamespace statt echter Phase 1); Herkunft: jetzt."""
     p1 = SimpleNamespace(m3_threshold=1., cusum_k=2., cusum_h=3., practice={"M3-B": [1, 4]}, deltas={"M3-B": .5},
                          sec=2.)
     premise = {"ok": ok, "color_invariance": 1., "fwd_surprise": 1., "freq_surprise": 2.,
                "restanteil": float("nan"), "shift": .1}
-    return Prepared(seed=seed, config=cfg.as_dict(), p1=p1, premise=premise,
-                    p_global={"p_global": .4} if ok else None, sec=3.)
+    return Prepared(seed=seed, config=cfg.as_dict(), fingerprint=fingerprint or run.fingerprint(), p1=p1,
+                    premise=premise, p_global={"p_global": .4} if ok else None, sec=3.)
 
 
 def test_total_sec_is_preparation_plus_the_condition_times():       # Festlegung 9
@@ -401,25 +402,95 @@ def test_prepare_job_recomputes_a_pickle_with_another_config(tmp_path, monkeypat
     assert sorted(x.name for x in work.iterdir()) == ["seed_0.prep.pkl"]          # keine Temp-Datei übrig
 
 
+def test_prepare_job_recomputes_a_pickle_from_other_code_or_environment(tmp_path, monkeypatch):
+    work = tmp_path / ".work"; work.mkdir()
+    f = work / "seed_0.prep.pkl"; f.write_bytes(pickle.dumps(_stub_prep(fingerprint="0" * 64)))   # gleiche Konfiguration
+    calls = []
+    monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: calls.append(seed) or _stub_prep(cfg, seed=seed))
+    assert run._prepare_job((0, TINY, str(tmp_path))) == (0, True)
+    assert calls == [0] and pickle.loads(f.read_bytes()).fingerprint == run.fingerprint()
+    run._prepare_job((0, TINY, str(tmp_path)))                       # jetzt passt die Herkunft: kein zweites Mal
+    assert calls == [0]
+
+
+def test_prepare_job_recomputes_a_pickle_without_a_fingerprint(tmp_path, monkeypatch):
+    work = tmp_path / ".work"; work.mkdir()
+    old = _stub_prep(); del old.fingerprint                                   # Pickle aus der Zeit vor dem Fingerabdruck
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(old))
+    calls = []
+    monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: calls.append(seed) or _stub_prep(cfg, seed=seed))
+    run._prepare_job((0, TINY, str(tmp_path)))
+    assert calls == [0]
+
+
+def test_prepare_seed_stores_the_current_fingerprint(monkeypatch):
+    monkeypatch.setattr(run, "phase1", lambda seed, cfg: SimpleNamespace(sec=1.))
+    monkeypatch.setattr(run, "premise_checks", lambda seed, cfg, p1: {"ok": False})
+    assert prepare_seed(0, TINY).fingerprint == run.fingerprint()
+
+
+def test_fingerprint_follows_source_and_environment_but_not_tests(tmp_path, monkeypatch):
+    src = tmp_path / "farbversuch"; (src / "tests").mkdir(parents=True)
+    (src / "a.py").write_text("x = 1\n"); (src / "b.py").write_text("y = 2\n")
+    (src / "tests" / "t.py").write_text("t = 0\n")
+    monkeypatch.setattr(run, "_SRC_DIR", src)
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    base = run.fingerprint()
+    assert re.fullmatch(r"[0-9a-f]{64}", base) and run.fingerprint() == base
+    (src / "tests" / "t.py").write_text("t = 5\n")                           # Tests gehören nicht zur Herkunft
+    assert run.fingerprint() == base
+    (src / "b.py").write_text("y = 3\n")                                     # Quelltext
+    changed = run.fingerprint()
+    assert changed != base
+    monkeypatch.setenv("OMP_NUM_THREADS", "2")                               # Umgebung
+    assert run.fingerprint() not in (base, changed)
+
+
+def test_fingerprint_covers_the_package_sources():
+    assert run._SRC_DIR == Path(run.__file__).resolve().parent and (run._SRC_DIR / "run.py").exists()
+
+
 def test_prepare_job_creates_the_work_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: _stub_prep(cfg, seed=seed))
     assert run._prepare_job((0, TINY, str(tmp_path / "o"))) == (0, True)
     assert (tmp_path / "o" / ".work" / "seed_0.prep.pkl").exists()
 
 
-def test_deploy_job_reuses_a_condition_file_with_the_same_config_only(tmp_path, monkeypatch):
+def _cond_file(config=None, fingerprint="current", sec=7.):
+    """Inhalt einer Bedingungsdatei; fingerprint "current" = Herkunft dieses Prozesses, None = Schlüssel fehlt."""
+    d = {"config": config or TINY.as_dict(), "result": {"kept": 1}, "sec": sec}
+    if fingerprint is not None:
+        d["fingerprint"] = run.fingerprint() if fingerprint == "current" else fingerprint
+    return d
+
+
+def test_deploy_job_reuses_a_condition_file_with_the_same_config_and_origin_only(tmp_path, monkeypatch):
     work = tmp_path / ".work"; work.mkdir()
     f = work / "seed_0.red.json"
     monkeypatch.setattr(run, "deploy",
                         lambda seed, cfg, p1, p_global, condition: {"fresh": [seed, p_global, condition]})
-    f.write_text(json.dumps({"config": TINY.as_dict(), "result": {"kept": 1}, "sec": 7.}))
+    f.write_text(json.dumps(_cond_file()))
     run._deploy_job((0, TINY, str(tmp_path), "red"))              # ohne Prep-Pickle: sie wird nicht einmal geladen
-    assert json.loads(f.read_text()) == {"config": TINY.as_dict(), "result": {"kept": 1}, "sec": 7.}
-    f.write_text(json.dumps({"config": {**TINY.as_dict(), "k": 99}, "result": {"kept": 1}, "sec": 7.}))
+    assert json.loads(f.read_text()) == _cond_file()
+    f.write_text(json.dumps(_cond_file({**TINY.as_dict(), "k": 99})))
     (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(_stub_prep()))
     run._deploy_job((0, TINY, str(tmp_path), "red"))
     got = json.loads(f.read_text())
     assert got["config"] == TINY.as_dict() and got["result"] == {"fresh": [0, .4, "red"]} and got["sec"] >= 0
+    assert got["fingerprint"] == run.fingerprint()
+    assert sorted(x.name for x in work.iterdir()) == ["seed_0.prep.pkl", "seed_0.red.json"]
+
+
+@pytest.mark.parametrize("fingerprint", ["0" * 64, None])     # anderer Code/andere Umgebung / Datei ohne Fingerabdruck
+def test_deploy_job_recomputes_a_condition_file_from_other_code_or_environment(tmp_path, monkeypatch, fingerprint):
+    work = tmp_path / ".work"; work.mkdir()
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(_stub_prep()))
+    f = work / "seed_0.red.json"; f.write_text(json.dumps(_cond_file(fingerprint=fingerprint)))   # gleiche Konfiguration
+    monkeypatch.setattr(run, "deploy",
+                        lambda seed, cfg, p1, p_global, condition: {"fresh": [seed, p_global, condition]})
+    run._deploy_job((0, TINY, str(tmp_path), "red"))
+    got = json.loads(f.read_text())
+    assert got["result"] == {"fresh": [0, .4, "red"]} and got["fingerprint"] == run.fingerprint()
     assert sorted(x.name for x in work.iterdir()) == ["seed_0.prep.pkl", "seed_0.red.json"]
 
 

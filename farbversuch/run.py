@@ -2,6 +2,7 @@
 Monitor sehen nur Beobachtungen, Aktionen und Verschiebungen. Üben (Phase 1), Prämissen, p_global, Einsatz,
 sequentieller Ablauf (run_seed) und gestufter paralleler Treiber über Seeds und Bedingungen (CLI)."""
 import argparse
+import hashlib
 import json
 import math
 import multiprocessing
@@ -314,6 +315,19 @@ def env_block() -> dict:
             "python": platform.python_version()}
 
 
+_SRC_DIR = Path(__file__).resolve().parent
+
+
+def fingerprint() -> str:
+    """Herkunft eines Zwischenstands: Quelltext aller Module von farbversuch (ohne tests/) und die Umgebung (env_block).
+    Ein Zwischenstand aus anderem Code oder anderer Umgebung wird nicht wiederverwendet."""
+    h = hashlib.sha256()
+    for f in sorted(_SRC_DIR.glob("*.py")):
+        h.update(f.name.encode() + b"\0" + f.read_bytes() + b"\0")
+    h.update(json.dumps(env_block(), sort_keys=True).encode())
+    return h.hexdigest()
+
+
 def _log(msg: str) -> None:
     """Fortschritt für lange Läufe; nach stderr, damit stdout und Ergebnisse unberührt bleiben."""
     print(f"{time.strftime('%H:%M:%S')} {msg}", file=sys.stderr, flush=True)
@@ -328,6 +342,7 @@ class Prepared:
     """Alles, was die Bedingungen eines Seeds gemeinsam brauchen (Ergebnis der Vorbereitung)."""
     seed: int
     config: dict                    # cfg.as_dict(): eine gespeicherte Vorbereitung gilt nur für dieselbe Konfiguration
+    fingerprint: str                # Code und Umgebung, aus denen sie stammt (fingerprint())
     p1: Phase1
     premise: dict
     p_global: dict | None           # None, wenn die Prämisse nicht erfüllt ist
@@ -341,8 +356,8 @@ def prepare_seed(seed: int, cfg: Config) -> Prepared:
     premise = premise_checks(seed, cfg, p1)
     _log(f"seed {seed} Phase 1 fertig ({p1.sec:.0f} s), Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'}")
     p_global = find_p_global(seed, cfg, p1) if premise["ok"] else None
-    return Prepared(seed=int(seed), config=cfg.as_dict(), p1=p1, premise=premise, p_global=p_global,
-                    sec=time.perf_counter() - t0)
+    return Prepared(seed=int(seed), config=cfg.as_dict(), fingerprint=fingerprint(), p1=p1, premise=premise,
+                    p_global=p_global, sec=time.perf_counter() - t0)
 
 
 def result_json(prep: Prepared, conditions: dict | None, cond_sec: dict[str, float]) -> dict:
@@ -418,7 +433,7 @@ def _load_prep(work: Path, seed: int) -> Prepared:
 
 
 # Die drei Stufen von main. Die Arbeiter sind top-level, damit spawn sie importieren kann; Zwischenstände liegen in
-# <out>/.work und werden nur bei gleicher Konfiguration wiederverwendet.
+# <out>/.work und werden nur bei gleicher Konfiguration und gleicher Herkunft (fingerprint) wiederverwendet.
 def _prepare_job(task: tuple[int, Config, str]) -> tuple[int, bool]:
     """Stufe 1: Vorbereitung eines Seeds als Pickle. Gibt (Seed, Prämisse erfüllt) zurück."""
     seed, cfg, out = task
@@ -426,7 +441,7 @@ def _prepare_job(task: tuple[int, Config, str]) -> tuple[int, bool]:
     work.mkdir(parents=True, exist_ok=True)
     path = work / f"seed_{seed}.prep.pkl"
     prep = _load_prep(work, seed) if path.exists() else None
-    if prep is not None and prep.config == cfg.as_dict():
+    if prep is not None and prep.config == cfg.as_dict() and getattr(prep, "fingerprint", None) == fingerprint():
         _log(f"seed {seed} Vorbereitung übernommen")
     else:
         prep = prepare_seed(seed, cfg)
@@ -435,15 +450,19 @@ def _prepare_job(task: tuple[int, Config, str]) -> tuple[int, bool]:
 
 
 def _deploy_job(task: tuple[int, Config, str, str]) -> tuple[int, str]:
-    """Stufe 2: eine Bedingung eines Seeds; Monitor-Ergebnis und Laufzeit nach <out>/.work/seed_<n>.<condition>.json."""
+    """Stufe 2: eine Bedingung eines Seeds; Monitor-Ergebnis, Laufzeit, Konfiguration und Herkunft nach
+    <out>/.work/seed_<n>.<condition>.json."""
     seed, cfg, out, condition = task
     work = Path(out) / ".work"
     path = work / f"seed_{seed}.{condition}.json"
-    if path.exists() and json.loads(path.read_text()).get("config") == cfg.as_dict():
+    origin = fingerprint()
+    stored = json.loads(path.read_text()) if path.exists() else {}
+    if stored.get("config") == cfg.as_dict() and stored.get("fingerprint") == origin:
         _log(f"seed {seed} Bedingung {condition} übernommen")
     else:
         result, sec = _deploy_timed(_load_prep(work, seed), cfg, condition)
-        _write_atomic(path, json.dumps({"config": cfg.as_dict(), "result": result, "sec": sec}))
+        _write_atomic(path, json.dumps({"config": cfg.as_dict(), "fingerprint": origin, "result": result,
+                                        "sec": sec}))
         _log(f"seed {seed} Bedingung {condition} fertig ({sec:.0f} s)")
     return seed, condition
 
