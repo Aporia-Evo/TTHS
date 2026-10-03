@@ -1,12 +1,14 @@
 """Monitor: Ringpuffer, Kandidatenmerkmale (Arm A: Beobachtungsbit UND Aktion, Arm B: Zielzelle der Aktion),
 Bemerken (M3, CUSUM), Kalibrierung an Null-Strömen und Erklären per Modellvergleich (M3) oder
-Permutationstest mit Holm (S1)."""
-from collections.abc import Sequence
+Permutationstest mit Holm (S1), zusammengefasst in der Klasse Monitor."""
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 
 from farbversuch.forward import fit_logreg, fwd_design, mean_loglik
+from farbversuch.seeds import CV, PERM, rng as make_rng
 from farbversuch.world import CH_COLOR, CH_GOAL, CH_WALL, DELTAS, N_ACTIONS, N_DISP, OBS_DIM, obs_index
 
 
@@ -234,3 +236,111 @@ def s1_explain(S: np.ndarray, F: np.ndarray, opened: Sequence[int], rng: np.rand
     diff, p = perm_pvalues(S, F[:, candidates], rng, n_perm)
     rejected = holm_select(p, diff, alpha)
     return [int(candidates[j]) for j in rejected[:max(0, max_open - len(opened))]]
+
+
+SYSTEMS = ("M3-B", "M3-A", "S1-B", "S1-A")
+
+
+class _SystemState:
+    """Zustand eines Systems: Name wie "M3-B" = Verfahren (M3, S1) und Arm (A, B)."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.kind, self.arm = name.split("-")
+        self.noticed: int | None = None
+        self.opened: list[dict] = []
+        self.stats = FitStats()
+        self.check_sec: list[float] = []
+        self.cusum = 0.
+
+    def open(self, cand: int, episode: int) -> None:
+        self.opened.append({"cand": int(cand), "name": candidate_name(self.arm, int(cand)), "episode": episode})
+
+
+class Monitor:
+    """Beobachtet nur Erfahrung (obs, Aktion, Verschiebung); die vier Systeme teilen sich einen Puffer."""
+
+    def __init__(self, encode: Callable[[np.ndarray], np.ndarray], forward, *, m3_threshold: float,
+                 cusum_k: float, cusum_h: float, seed: int, systems: Sequence[str] = SYSTEMS,
+                 buffer_size: int = 2000, window: int = 500, interval: int = 10, n_folds: int = 5,
+                 max_open: int = 3, n_perm: int = 1000, alpha: float = 0.05, l2: float = 1e-3,
+                 tol: float = 1e-6, max_iter: int = 500):
+        assert buffer_size >= window
+        unknown = [name for name in systems if name not in SYSTEMS]
+        if unknown:
+            raise ValueError(f"unbekannte Systeme: {unknown}")
+        self.encode, self.forward = encode, forward
+        self.m3_threshold, self.cusum_k, self.cusum_h = m3_threshold, cusum_k, cusum_h
+        self.seed, self.window, self.interval = seed, window, interval
+        self.n_folds, self.max_open, self.n_perm, self.alpha = n_folds, max_open, n_perm, alpha
+        self.l2, self.tol, self.max_iter = l2, tol, max_iter
+        self.buffer = RingBuffer(buffer_size)
+        self.episodes = 0                                  # E: abgeschlossene Episoden
+        self._systems = [_SystemState(name) for name in SYSTEMS if name in systems]
+
+    def add_step(self, obs: np.ndarray, action: int, disp: int) -> None:
+        s = float(self.forward.surprise(self.encode(obs[None]), np.array([action]), np.array([disp]))[0])
+        self.buffer.add(obs, action, disp, s)
+        for system in self._systems:
+            if system.kind == "S1" and system.noticed is None:
+                system.cusum = max(0., system.cusum + s - self.cusum_k)
+                if system.cusum > self.cusum_h:
+                    system.noticed = self.episodes + 1     # Alarm in Episode i (0-basiert, E = i fertig) zählt als i + 1
+
+    def end_episode(self) -> None:
+        self.episodes += 1
+        if self.episodes % self.interval == 0:
+            self._checkpoint()
+
+    def _checkpoint(self) -> None:
+        E = self.episodes
+        cache: dict = {}                                   # pro Prüfpunkt höchstens einmal, erst bei Bedarf berechnet
+
+        def data():
+            if "data" not in cache:
+                cache["data"] = self.buffer.data()
+            return cache["data"]
+
+        def encoded():
+            if "Z" not in cache:
+                cache["Z"] = self.encode(data()[0])
+            return cache["Z"]
+
+        def candidates(arm):
+            if arm not in cache:
+                build = candidates_B if arm == "B" else candidates_A
+                cache[arm] = build(data()[0], data()[1])
+            return cache[arm]
+
+        for system in self._systems:
+            t0 = time.perf_counter()
+            worked = False
+            if system.kind == "M3" and system.noticed is None and len(self.buffer) >= self.window:
+                worked = True
+                if float(np.mean(data()[3][-self.window:])) > self.m3_threshold:
+                    system.noticed = E
+            if system.noticed is not None and len(system.opened) < self.max_open:
+                worked = True
+                known = [o["cand"] for o in system.opened]
+                if system.kind == "M3":
+                    c = m3_explain(encoded(), data()[1], data()[2], candidates(system.arm), known,
+                                   make_rng(self.seed, CV, E), l2=self.l2, n_folds=self.n_folds, tol=self.tol,
+                                   max_iter=self.max_iter, stats=system.stats)
+                    new = [] if c is None else [c]
+                else:
+                    new = s1_explain(data()[3], candidates(system.arm), known, make_rng(self.seed, PERM, E),
+                                     n_perm=self.n_perm, alpha=self.alpha, max_open=self.max_open)
+                for c in new:
+                    system.open(c, E)
+            if worked:
+                system.check_sec.append(time.perf_counter() - t0)
+
+    def results(self) -> dict[str, dict]:
+        return {system.name: {"noticed": system.noticed,
+                              "opened": [dict(o) for o in system.opened],
+                              "buffer_bytes": int(self.buffer.nbytes),
+                              "n_fits": system.stats.n_fits,
+                              "fit_size": system.stats.size,
+                              "check_sec": list(system.check_sec),
+                              "total_sec": float(sum(system.check_sec))}
+                for system in self._systems}
