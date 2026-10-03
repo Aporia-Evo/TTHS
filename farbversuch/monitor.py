@@ -144,26 +144,32 @@ def cv_folds(n: int, rng: np.random.Generator, n_folds: int = 5) -> list[np.ndar
     return np.array_split(rng.permutation(n), n_folds)
 
 
-def select_m3(imp: np.ndarray, candidates: Sequence[int]) -> int | None:
+def select_m3(imp: np.ndarray, candidates: Sequence[int], delta: float = 0.0) -> int | None:
     """imp: (len(candidates), n_folds). Größte mittlere Verbesserung unter Kandidaten mit imp > 0 in allen
-    Teilungen; bei Gleichstand der kleinere Index."""
+    Teilungen und Mittel > delta (strikt); bei Gleichstand der kleinere Index."""
     imp, cand = np.asarray(imp), np.asarray(candidates)
-    ok = np.flatnonzero((imp > 0).all(axis=1))
+    means = imp.mean(axis=1)
+    ok = np.flatnonzero((imp > 0).all(axis=1) & (means > delta))
     if len(ok) == 0:
         return None
-    means = imp[ok].mean(axis=1)
-    return int(cand[ok[means == means.max()]].min())
+    best = means[ok].max()
+    return int(cand[ok[means[ok] == best]].min())
 
 
-def m3_explain(Z, A, D, F, opened: Sequence[int], rng: np.random.Generator, l2: float = 1e-3, n_folds: int = 5,
-               tol: float = 1e-6, max_iter: int = 500, stats: FitStats | None = None) -> int | None:
-    """Kreuzvalidierter Vergleich Basismodell gegen Basis + je ein Kandidat; liefert den zu öffnenden Kandidaten."""
+def m3_improvements(Z, A, D, F, opened: Sequence[int], rng: np.random.Generator, l2: float = 1e-3, n_folds: int = 5,
+                    tol: float = 1e-6, max_iter: int = 500,
+                    stats: FitStats | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Kreuzvalidierte Verbesserung der mittleren Log-Likelihood je (Kandidat, Teilung): Basismodell gegen Basis +
+    residualisierter Kandidat. Liefert (imp, Kandidatenindizes). Residualisiert wird je Teilung für alle Kandidaten
+    gemeinsam gegen das Basisdesign; ist der Rest auf der Trainingsteilung praktisch null, bleibt die Verbesserung 0
+    ohne Anpassung. rng zieht nur die Teilung."""
     D = np.asarray(D, dtype=np.intp)
     opened = np.asarray(opened, dtype=np.intp)
     folds = cv_folds(len(A), rng, n_folds)
     Xb = fwd_design(Z, A, F[:, opened])
     d = Xb.shape[1]
     candidates = np.setdiff1d(np.arange(F.shape[1]), opened)
+    Fc = F[:, candidates]
     imp = np.zeros((len(candidates), len(folds)))
     for f, test in enumerate(folds):
         train = np.setdiff1d(np.arange(len(A)), test)
@@ -172,19 +178,55 @@ def m3_explain(Z, A, D, F, opened: Sequence[int], rng: np.random.Generator, l2: 
         if stats is not None:
             stats.add(d, len(train))
         llb = mean_loglik(Xb_te, y_te, Wb)
-        F_tr, F_te = F[train][:, candidates], F[test][:, candidates]
-        varying = F_tr.min(axis=0) != F_tr.max(axis=0)   # konstante Spalten: Verbesserung exakt 0, keine Anpassung
+        F_tr = Fc[train].astype(np.float64)
+        B = np.linalg.lstsq(Xb_tr, F_tr, rcond=None)[0]
+        R_tr = F_tr - Xb_tr @ B
+        R_te = Fc[test] - Xb_te @ B
+        # Rest ~ 0 (auch Nullspalten, konstante Spalten, Duplikate, Basiskopien): Verbesserung exakt 0, keine Anpassung
+        active = np.flatnonzero(np.linalg.norm(R_tr, axis=0) > 1e-8 * np.linalg.norm(F_tr, axis=0))
         W0 = np.vstack([Wb, np.zeros((1, N_DISP))])
         Xe_tr = np.empty((len(train), d + 1)); Xe_tr[:, :d] = Xb_tr
         Xe_te = np.empty((len(test), d + 1)); Xe_te[:, :d] = Xb_te
-        for j in np.flatnonzero(varying):
-            Xe_tr[:, d] = F_tr[:, j]
-            Xe_te[:, d] = F_te[:, j]
+        for j in active:
+            Xe_tr[:, d] = R_tr[:, j]
+            Xe_te[:, d] = R_te[:, j]
             We, _ = fit_logreg(Xe_tr, y_tr, N_DISP, l2, W0=W0, tol=tol, max_iter=max_iter)
             if stats is not None:
                 stats.add(d + 1, len(train))
             imp[j, f] = mean_loglik(Xe_te, y_te, We) - llb
-    return select_m3(imp, candidates.tolist())
+    return imp, candidates
+
+
+def m3_explain(Z, A, D, F, opened: Sequence[int], rng: np.random.Generator, l2: float = 1e-3, n_folds: int = 5,
+               tol: float = 1e-6, max_iter: int = 500, delta: float = 0.0, stats: FitStats | None = None,
+               info: dict | None = None) -> int | None:
+    """Liefert den zu öffnenden Kandidaten (select_m3 über m3_improvements) oder None. Bei einer Öffnung und
+    gegebenem info steht danach info["gain"] = mittlere Verbesserung dieses Kandidaten."""
+    imp, candidates = m3_improvements(Z, A, D, F, opened, rng, l2, n_folds, tol, max_iter, stats)
+    c = select_m3(imp, candidates, delta)
+    if c is not None and info is not None:
+        info["gain"] = float(imp[np.flatnonzero(candidates == c)[0]].mean())
+    return c
+
+
+def m3_null_gain(Z, A, D, F, opened: Sequence[int], rng: np.random.Generator, **fit_kw) -> float:
+    """Größte mittlere Verbesserung unter den Kandidaten mit Verbesserung > 0 in allen Teilungen, sonst 0.0."""
+    imp, _ = m3_improvements(Z, A, D, F, opened, rng, **fit_kw)
+    eligible = (imp > 0).all(axis=1)
+    return float(imp[eligible].mean(axis=1).max()) if eligible.any() else 0.0
+
+
+def pre_open_m3(Z, A, D, F, rng_for_round: Callable[[int], np.random.Generator], delta: float,
+                max_open: int = 8, **fit_kw) -> list[int]:
+    """Gierig: Runde r (ab 0) ruft m3_explain mit rng_for_round(r) und den bisher geöffneten auf; Ende bei None
+    oder nach max_open Merkmalen."""
+    opened: list[int] = []
+    for r in range(max_open):
+        c = m3_explain(Z, A, D, F, opened, rng_for_round(r), delta=delta, **fit_kw)
+        if c is None:
+            break
+        opened.append(int(c))
+    return opened
 
 
 def perm_pvalues(S: np.ndarray, F: np.ndarray, rng: np.random.Generator,
