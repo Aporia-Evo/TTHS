@@ -102,7 +102,7 @@ def test_explain_gets_buffer_data_opened_and_keyed_rng(monkeypatch):
     assert k["l2"] == .1 and k["n_folds"] == 3 and isinstance(k["stats"], FitStats)
     S, opened, state, k = got["s1"]
     assert S == [1.] * 40 and opened == [] and state == seeds.rng(7, seeds.PERM, 20).bit_generator.state
-    assert k == dict(n_perm=50, alpha=.01, max_new=4)
+    assert k == dict(n_perm=50, alpha=.01, max_new=4, chunk=1000)
 
 
 def test_m3_fit_stats_reported_and_results_are_json(monkeypatch):
@@ -233,3 +233,51 @@ def test_alarms_need_strictly_more_than_the_threshold(quiet):
     assert run_stream(single, cusum_h=1., **common)["S1-B"]["noticed"] == 3             # 1,0 == h löst nicht aus
     assert run_stream(single, cusum_h=np.nextafter(1., 0.), **common)["S1-B"]["noticed"] == 2
     assert run_stream(single, cusum_h=1.5, **common)["S1-B"]["noticed"] == 4              # 1,5 == h, erst 2,0 löst aus
+
+
+def test_practice_not_retested_not_counted(monkeypatch):
+    seen = []
+    monkeypatch.setattr(monitor, "m3_explain", lambda Z, A, D, F, opened, rng, **k: seen.append(list(opened)) or None)
+    m = make(systems=("M3-B",), practice={"M3-B": [4]}); feed(m, 10)
+    r = m.results()["M3-B"]
+    assert seen == [[4]] and r["opened"] == [] and r["practice"] == [{"cand": 4, "name": "Wand"}]
+
+
+def test_cap_counts_only_reopened(monkeypatch):
+    nxt = iter([0, 1, 2, 3]); monkeypatch.setattr(monitor, "m3_explain", lambda *a, **k: next(nxt))
+    m = make(systems=("M3-B",), practice={"M3-B": [4, 5]}); feed(m, 60)
+    assert [o["cand"] for o in m.results()["M3-B"]["opened"]] == [0, 1, 2]
+
+
+def test_delta_and_perms_per_system(monkeypatch):
+    got = {}
+    monkeypatch.setattr(monitor, "m3_explain", lambda *a, **k: got.setdefault("delta", k["delta"]) and None)
+    monkeypatch.setattr(monitor, "s1_explain", lambda *a, **k: got.setdefault(k["n_perm"], k["max_new"]) and [])
+    m = make(deltas={"M3-B": .02, "M3-A": .03}, n_perm_A=25000); feed(m, 10)
+    assert got["delta"] == .02 and got[1000] == 3 and got[25000] == 3
+    assert m.results()["S1-B"]["delta"] is None and m.results()["M3-A"]["delta"] == .03
+
+
+def test_opened_records_gain(monkeypatch):
+    def fake(*a, info=None, **k):
+        info["gain"] = .07
+        return 0
+    monkeypatch.setattr(monitor, "m3_explain", fake)
+    m = make(systems=("M3-B",)); feed(m, 10)
+    assert m.results()["M3-B"]["opened"][0]["gain"] == .07
+
+
+def test_s1_cap_is_max_open_minus_reopened_not_practice(monkeypatch):
+    calls = []
+    answers = [[3], [0, 1, 2]]                    # zweite Antwort länger, als noch Platz ist
+
+    def s1(S, F, opened, rng, **k):
+        calls.append((list(opened), k["max_new"]))
+        return answers[len(calls) - 1][:k["max_new"]]     # wie s1_explain: höchstens max_new
+
+    monkeypatch.setattr(monitor, "s1_explain", s1)
+    m = make(m3_threshold=99., systems=("S1-B",), practice={"S1-B": [4, 5]}); feed(m, 50)
+    r = m.results()["S1-B"]
+    assert calls == [([4, 5], 3), ([4, 5, 3], 2)]         # danach nichts mehr: 3 wieder geöffnet = max_open
+    assert [o["cand"] for o in r["opened"]] == [3, 0, 1] and [o["episode"] for o in r["opened"]] == [10, 20, 20]
+    assert all(o["gain"] is None for o in r["opened"]) and r["delta"] is None

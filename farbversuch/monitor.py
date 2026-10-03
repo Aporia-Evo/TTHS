@@ -2,7 +2,7 @@
 Bemerken (M3, CUSUM), Kalibrierung an Null-Strömen und Erklären per Modellvergleich (M3) oder
 Permutationstest mit Holm (S1), zusammengefasst in der Klasse Monitor."""
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -307,19 +307,27 @@ SYSTEMS = ("M3-B", "M3-A", "S1-B", "S1-A")
 
 
 class _SystemState:
-    """Zustand eines Systems: Name wie "M3-B" = Verfahren (M3, S1) und Arm (A, B)."""
+    """Zustand eines Systems: Name wie "M3-B" = Verfahren (M3, S1) und Arm (A, B). `practice` ist die Übungs-Ontologie
+    (nie getestet, zählt nicht), `opened` enthält nur Wiederöffnungen."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, practice: Sequence[int] = (), delta: float = 0.0):
         self.name = name
         self.kind, self.arm = name.split("-")
+        self.practice = [int(c) for c in practice]
+        self.delta = float(delta)
         self.noticed: int | None = None
         self.opened: list[dict] = []
         self.stats = FitStats()
         self.check_sec: list[float] = []
         self.cusum = 0.
 
-    def open(self, cand: int, episode: int) -> None:
-        self.opened.append({"cand": int(cand), "name": candidate_name(self.arm, int(cand)), "episode": episode})
+    @property
+    def known(self) -> list[int]:
+        return self.practice + [o["cand"] for o in self.opened]
+
+    def open(self, cand: int, episode: int, gain: float | None = None) -> None:
+        self.opened.append({"cand": int(cand), "name": candidate_name(self.arm, int(cand)), "episode": episode,
+                            "gain": gain})
 
 
 class Monitor:
@@ -329,7 +337,8 @@ class Monitor:
                  cusum_k: float, cusum_h: float, seed: int, systems: Sequence[str] = SYSTEMS,
                  buffer_size: int = 2000, window: int = 500, interval: int = 10, n_folds: int = 5,
                  max_open: int = 3, n_perm: int = 1000, alpha: float = 0.05, l2: float = 1e-3,
-                 tol: float = 1e-6, max_iter: int = 500):
+                 tol: float = 1e-6, max_iter: int = 500, practice: Mapping[str, Sequence[int]] | None = None,
+                 deltas: Mapping[str, float] | None = None, n_perm_A: int = 25000, perm_chunk: int = 1000):
         assert buffer_size >= window
         unknown = [name for name in systems if name not in SYSTEMS]
         if unknown:
@@ -338,10 +347,13 @@ class Monitor:
         self.m3_threshold, self.cusum_k, self.cusum_h = m3_threshold, cusum_k, cusum_h
         self.seed, self.window, self.interval = seed, window, interval
         self.n_folds, self.max_open, self.n_perm, self.alpha = n_folds, max_open, n_perm, alpha
+        self.n_perm_A, self.perm_chunk = n_perm_A, perm_chunk
         self.l2, self.tol, self.max_iter = l2, tol, max_iter
         self.buffer = RingBuffer(buffer_size)
         self.episodes = 0                                  # E: abgeschlossene Episoden
-        self._systems = [_SystemState(name) for name in SYSTEMS if name in systems]
+        practice, deltas = practice or {}, deltas or {}
+        self._systems = [_SystemState(name, practice.get(name, ()), deltas.get(name, 0.0))
+                         for name in SYSTEMS if name in systems]
 
     def add_step(self, obs: np.ndarray, action: int, disp: int) -> None:
         s = float(self.forward.surprise(self.encode(obs[None]), np.array([action]), np.array([disp]))[0])
@@ -386,22 +398,27 @@ class Monitor:
                     system.noticed = E
             if system.noticed is not None and len(system.opened) < self.max_open:
                 worked = True
-                known = [o["cand"] for o in system.opened]
                 if system.kind == "M3":
-                    c = m3_explain(encoded(), data()[1], data()[2], candidates(system.arm), known,
+                    info: dict = {}
+                    c = m3_explain(encoded(), data()[1], data()[2], candidates(system.arm), system.known,
                                    make_rng(self.seed, CV, E), l2=self.l2, n_folds=self.n_folds, tol=self.tol,
-                                   max_iter=self.max_iter, stats=system.stats)
-                    new = [] if c is None else [c]
+                                   max_iter=self.max_iter, delta=system.delta, stats=system.stats, info=info)
+                    if c is not None:
+                        system.open(c, E, info.get("gain"))
                 else:
-                    new = s1_explain(data()[3], candidates(system.arm), known, make_rng(self.seed, PERM, E),
-                                     n_perm=self.n_perm, alpha=self.alpha, max_new=self.max_open - len(known))
-                for c in new:
-                    system.open(c, E)
+                    n_perm = self.n_perm if system.arm == "B" else self.n_perm_A
+                    for c in s1_explain(data()[3], candidates(system.arm), system.known,
+                                        make_rng(self.seed, PERM, E), n_perm=n_perm, alpha=self.alpha,
+                                        max_new=self.max_open - len(system.opened), chunk=self.perm_chunk):
+                        system.open(c, E)
             if worked:
                 system.check_sec.append(time.perf_counter() - t0)
 
     def results(self) -> dict[str, dict]:
         return {system.name: {"noticed": system.noticed,
+                              "practice": [{"cand": c, "name": candidate_name(system.arm, c)}
+                                           for c in system.practice],
+                              "delta": system.delta if system.kind == "M3" else None,
                               "opened": [dict(o) for o in system.opened],
                               "buffer_bytes": int(self.buffer.nbytes),
                               "n_fits": system.stats.n_fits,
