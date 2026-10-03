@@ -102,7 +102,7 @@ def test_explain_gets_buffer_data_opened_and_keyed_rng(monkeypatch):
     assert k["l2"] == .1 and k["n_folds"] == 3 and isinstance(k["stats"], FitStats)
     S, opened, state, k = got["s1"]
     assert S == [1.] * 40 and opened == [] and state == seeds.rng(7, seeds.PERM, 20).bit_generator.state
-    assert k == dict(n_perm=50, alpha=.01, max_open=4)
+    assert k == dict(n_perm=50, alpha=.01, max_new=4)
 
 
 def test_m3_fit_stats_reported_and_results_are_json(monkeypatch):

@@ -229,30 +229,47 @@ def pre_open_m3(Z, A, D, F, rng_for_round: Callable[[int], np.random.Generator],
     return opened
 
 
-def perm_pvalues(S: np.ndarray, F: np.ndarray, rng: np.random.Generator,
-                 n_perm: int = 1000) -> tuple[np.ndarray, np.ndarray]:
+def _snap_to_grid(S: np.ndarray) -> np.ndarray:
+    """Rundet S auf ein 2^-q-Raster, auf dem jede Teilsumme von bis zu len(S) Werten in float64 exakt ist: so
+    hängt kein Summenwert von der Reihenfolge der BLAS-Summation ab (also nicht von der Blockbreite), und
+    Gleichstände sind echte Gleichstände. Rundungsfehler höchstens 2^(b-52) relativ zu max|S|, b = Bitlänge von n
+    (n = 2000: etwa 5e-13)."""
+    amax = float(np.abs(S).max(initial=0.))
+    if not np.isfinite(amax) or amax == 0.:
+        return S
+    q = 52 - np.frexp(amax)[1] - int(len(S)).bit_length()
+    return np.ldexp(np.round(np.ldexp(S, q)), -q)
+
+
+def perm_pvalues(S: np.ndarray, F: np.ndarray, rng: np.random.Generator, n_perm: int = 1000,
+                 chunk: int = 1000) -> tuple[np.ndarray, np.ndarray]:
     """(diff, p) je Spalte; einseitig: diff = mean(S|F=1) - mean(S|F=0), p = (1 + #{Perm-diff >= diff}) / (1 + n_perm).
-    Eine über alle Zeilen konstante Spalte hat diff 0 und p 1. Zieht immer genau n_perm Permutationen aus rng."""
-    S = np.asarray(S, dtype=np.float64)
+    Eine über alle Zeilen konstante Spalte hat diff 0 und p 1. Zieht immer genau n_perm Permutationen aus rng, in
+    dieser Reihenfolge, aber blockweise zu höchstens chunk Spalten (Speicher unabhängig von n_perm). S wird vorher
+    auf ein Raster gerundet (_snap_to_grid); dadurch ist das Ergebnis bitgleich für jedes chunk."""
+    if chunk < 1:
+        raise ValueError("chunk muss >= 1 sein")
+    S = _snap_to_grid(np.asarray(S, dtype=np.float64))
     n = len(S)
-    P = np.stack([rng.permutation(S) for _ in range(n_perm)], 1)
     n1 = np.asarray(F).sum(axis=0, dtype=np.int64)
     varying = (n1 > 0) & (n1 < n)
+    Fv_T = np.ascontiguousarray(np.asarray(F[:, varying], dtype=np.float64).T)
+    k1 = n1[varying].astype(np.float64)[:, None]
+    k0 = n - k1
+    total = S.sum()
+
+    def mean_diff(sum1: np.ndarray) -> np.ndarray:       # sum1: Summe von S über Zeilen mit F=1, je Spalte
+        return sum1 / k1 - (total - sum1) / k0
+
+    obs = mean_diff(Fv_T @ S[:, None])
+    count = np.zeros(len(obs), dtype=np.int64)
+    for start in range(0, n_perm, chunk):
+        P = np.stack([rng.permutation(S) for _ in range(min(chunk, n_perm - start))], 1)
+        count += (mean_diff(Fv_T @ P) >= obs).sum(axis=1)
     diff = np.zeros(F.shape[1])
     p = np.ones(F.shape[1])
-    if varying.any():
-        Fv = np.asarray(F[:, varying], dtype=np.float64)
-        k1 = n1[varying].astype(np.float64)[:, None]
-        k0 = n - k1
-        total = S.sum()
-
-        def mean_diff(sum1: np.ndarray) -> np.ndarray:   # sum1: Summe von S über Zeilen mit F=1, je Spalte
-            return sum1 / k1 - (total - sum1) / k0
-
-        obs = mean_diff(Fv.T @ S[:, None])
-        perm = mean_diff(Fv.T @ P)
-        diff[varying] = obs[:, 0]
-        p[varying] = (1 + (perm >= obs).sum(axis=1)) / (1 + n_perm)
+    diff[varying] = obs[:, 0]
+    p[varying] = (1 + count) / (1 + n_perm)
     return diff, p
 
 
@@ -271,13 +288,19 @@ def holm_select(p: np.ndarray, diff: np.ndarray, alpha: float = 0.05) -> list[in
 
 
 def s1_explain(S: np.ndarray, F: np.ndarray, opened: Sequence[int], rng: np.random.Generator, n_perm: int = 1000,
-               alpha: float = 0.05, max_open: int = 3) -> list[int]:
+               alpha: float = 0.05, max_new: int = 3, chunk: int = 1000) -> list[int]:
     """Testet alle nicht geöffneten Kandidaten (Holm über alle, auch konstante) und liefert die neu zu öffnenden
-    Spaltenindizes in Testreihenfolge, höchstens max_open - len(opened)."""
+    Spaltenindizes in Testreihenfolge, höchstens max_new."""
     candidates = np.setdiff1d(np.arange(F.shape[1]), np.asarray(opened, dtype=np.intp))
-    diff, p = perm_pvalues(S, F[:, candidates], rng, n_perm)
+    diff, p = perm_pvalues(S, F[:, candidates], rng, n_perm, chunk)
     rejected = holm_select(p, diff, alpha)
-    return [int(candidates[j]) for j in rejected[:max(0, max_open - len(opened))]]
+    return [int(candidates[j]) for j in rejected[:max(0, max_new)]]
+
+
+def pre_open_s1(S: np.ndarray, F: np.ndarray, rng: np.random.Generator, n_perm: int, alpha: float = 0.05,
+                max_open: int = 8, chunk: int = 1000) -> list[int]:
+    """Vor-Öffnen: S1 ohne bisher geöffnete Merkmale, höchstens max_open."""
+    return s1_explain(S, F, [], rng, n_perm, alpha, max_new=max_open, chunk=chunk)
 
 
 SYSTEMS = ("M3-B", "M3-A", "S1-B", "S1-A")
@@ -371,7 +394,7 @@ class Monitor:
                     new = [] if c is None else [c]
                 else:
                     new = s1_explain(data()[3], candidates(system.arm), known, make_rng(self.seed, PERM, E),
-                                     n_perm=self.n_perm, alpha=self.alpha, max_open=self.max_open)
+                                     n_perm=self.n_perm, alpha=self.alpha, max_new=self.max_open - len(known))
                 for c in new:
                     system.open(c, E)
             if worked:
