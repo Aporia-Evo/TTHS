@@ -1,5 +1,6 @@
 """Monitor: Ringpuffer, Kandidatenmerkmale (Arm A: Beobachtungsbit UND Aktion, Arm B: Zielzelle der Aktion),
-Bemerken (M3, CUSUM), Kalibrierung an Null-Strömen und Erklären per Modellvergleich (M3)."""
+Bemerken (M3, CUSUM), Kalibrierung an Null-Strömen und Erklären per Modellvergleich (M3) oder
+Permutationstest mit Holm (S1)."""
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -182,3 +183,54 @@ def m3_explain(Z, A, D, F, opened: Sequence[int], rng: np.random.Generator, l2: 
                 stats.add(d + 1, len(train))
             imp[j, f] = mean_loglik(Xe_te, y_te, We) - llb
     return select_m3(imp, candidates.tolist())
+
+
+def perm_pvalues(S: np.ndarray, F: np.ndarray, rng: np.random.Generator,
+                 n_perm: int = 1000) -> tuple[np.ndarray, np.ndarray]:
+    """(diff, p) je Spalte; einseitig: diff = mean(S|F=1) - mean(S|F=0), p = (1 + #{Perm-diff >= diff}) / (1 + n_perm).
+    Eine über alle Zeilen konstante Spalte hat diff 0 und p 1. Zieht immer genau n_perm Permutationen aus rng."""
+    S = np.asarray(S, dtype=np.float64)
+    n = len(S)
+    P = np.stack([rng.permutation(S) for _ in range(n_perm)], 1)
+    n1 = np.asarray(F).sum(axis=0, dtype=np.int64)
+    varying = (n1 > 0) & (n1 < n)
+    diff = np.zeros(F.shape[1])
+    p = np.ones(F.shape[1])
+    if varying.any():
+        Fv = np.asarray(F[:, varying], dtype=np.float64)
+        k1 = n1[varying].astype(np.float64)[:, None]
+        k0 = n - k1
+        total = S.sum()
+
+        def mean_diff(sum1: np.ndarray) -> np.ndarray:   # sum1: Summe von S über Zeilen mit F=1, je Spalte
+            return sum1 / k1 - (total - sum1) / k0
+
+        obs = mean_diff(Fv.T @ S[:, None])
+        perm = mean_diff(Fv.T @ P)
+        diff[varying] = obs[:, 0]
+        p[varying] = (1 + (perm >= obs).sum(axis=1)) / (1 + n_perm)
+    return diff, p
+
+
+def holm_select(p: np.ndarray, diff: np.ndarray, alpha: float = 0.05) -> list[int]:
+    """Holm-Stufenverfahren über alle len(p) Hypothesen. Reihenfolge: p aufsteigend, diff absteigend, Index aufsteigend;
+    Rang i (0-basiert) wird abgelehnt, wenn p <= alpha / (m - i); Abbruch beim ersten Nein. Liefert die Ablehnungen."""
+    p, diff = np.asarray(p), np.asarray(diff)
+    m = len(p)
+    order = np.lexsort((np.arange(m), -diff, p))
+    selected = []
+    for i, j in enumerate(order):
+        if p[j] > alpha / (m - i):
+            break
+        selected.append(int(j))
+    return selected
+
+
+def s1_explain(S: np.ndarray, F: np.ndarray, opened: Sequence[int], rng: np.random.Generator, n_perm: int = 1000,
+               alpha: float = 0.05, max_open: int = 3) -> list[int]:
+    """Testet alle nicht geöffneten Kandidaten (Holm über alle, auch konstante) und liefert die neu zu öffnenden
+    Spaltenindizes in Testreihenfolge, höchstens max_open - len(opened)."""
+    candidates = np.setdiff1d(np.arange(F.shape[1]), np.asarray(opened, dtype=np.intp))
+    diff, p = perm_pvalues(S, F[:, candidates], rng, n_perm)
+    rejected = holm_select(p, diff, alpha)
+    return [int(candidates[j]) for j in rejected[:max(0, max_open - len(opened))]]
