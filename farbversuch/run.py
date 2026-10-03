@@ -131,7 +131,8 @@ def premise_checks(seed: int, cfg: Config, p1: Phase1) -> dict:
 def bisect_to_target(f: Callable[[float], float], target: float, lo: float, hi: float, rel_tol: float,
                      max_iter: int) -> tuple[float, bool, int]:
     """Bisektion für ein steigendes f. Gibt (p, getroffen, Auswertungen von f) zurück. Liegt das Ziel außerhalb
-    von [f(lo), f(hi)] (mit Toleranz), kommt der nächste Randwert mit False. max_iter zählt die Halbierungen."""
+    von [f(lo), f(hi)] (mit Toleranz), kommt der nächste Randwert mit False. Ist max_iter erschöpft, kommt mit False
+    der ausgewertete Punkt (Rand oder Mitte) mit dem kleinsten Abstand zum Ziel. max_iter zählt die Halbierungen."""
     tol = rel_tol * target
     evals = 1
     f_hi = f(hi)
@@ -145,7 +146,7 @@ def bisect_to_target(f: Callable[[float], float], target: float, lo: float, hi: 
         return lo, False, evals
     if abs(f_lo - target) <= tol:
         return lo, True, evals
-    best_p, best_gap = lo, abs(f_lo - target)
+    best_p, best_gap = min(((hi, abs(f_hi - target)), (lo, abs(f_lo - target))), key=lambda x: x[1])
     for _ in range(max_iter):
         mid = 0.5 * (lo + hi)
         f_mid = f(mid)
@@ -170,10 +171,21 @@ def find_p_global(seed: int, cfg: Config, p1: Phase1) -> dict:
                                           red_active=red_active))
         return float(p1.forward.surprise(p1.routine.encode(X), A, D).mean())
 
-    target = mean_surprise(cfg.p_slip, True)
-    p, hit, evals = bisect_to_target(lambda p_slip: mean_surprise(p_slip, False), target, cfg.p_slip, 1.0,
-                                     cfg.pglobal_tol, cfg.pglobal_max_iter)
-    return {"p_global": float(p), "red_surprise": target, "bracketed": bool(hit), "evals": int(evals)}
+    seen: dict[float, float] = {}
+
+    def f(p_slip: float) -> float:
+        seen[p_slip] = mean_surprise(p_slip, False)
+        return seen[p_slip]
+
+    lo, hi = cfg.p_slip, 1.0
+    target = mean_surprise(lo, True)
+    p, hit, evals = bisect_to_target(f, target, lo, hi, cfg.pglobal_tol, cfg.pglobal_max_iter)
+    # Festlegung 15: nicht einschließbar nur bei den beiden Randausstiegen (f(hi) zu klein, f(lo) zu groß);
+    # f(lo) wird nur ausgewertet, wenn f(hi) nicht schon ausstieg
+    tol = cfg.pglobal_tol * target
+    bracketed = not (seen[hi] < target - tol or (lo in seen and seen[lo] > target + tol))
+    return {"p_global": float(p), "red_surprise": target, "hit": bool(hit), "bracketed": bracketed,
+            "evals": int(evals)}
 
 
 def stream_episodes(seed: int, cfg: Config, p1: Phase1, p_global: float, condition: str) -> Iterator[Traj]:

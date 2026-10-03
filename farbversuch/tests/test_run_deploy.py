@@ -2,10 +2,12 @@ import dataclasses
 import json
 import os
 import platform
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+import farbversuch.run as run
 from farbversuch.run import (CONDITIONS, THREAD_VARS, bisect_to_target, deploy, env_block, find_p_global, main,
                              parse_seeds, run_seed, stream_episodes)
 from farbversuch.tests.helpers import TINY
@@ -35,6 +37,45 @@ def test_bisect_max_iter_reached():
     assert not ok and n == len(calls) == 2 + 4 and .1 < p < 1.
 
 
+def test_bisect_fallback_is_the_closest_evaluated_point_including_both_ends():
+    # Treppenfunktionen: keine Mitte trifft, der Rand mit dem kleinsten Abstand gewinnt
+    p, hit, n = bisect_to_target(lambda p: 0. if p < 1. else 1.4, 1., 0., 1., 1e-9, 3)
+    assert (p, hit, n) == (1., False, 5)
+    p, hit, n = bisect_to_target(lambda p: .9 if p == 0. else 5., 1., 0., 1., 1e-9, 3)
+    assert (p, hit, n) == (0., False, 5)
+
+
+def _fake_p1(curve, red):
+    """Phase1-Attrappe: Die Überraschung hängt nur von p_slip (curve) und red_active (red) ab."""
+    def surprise(Z, A, D):
+        return np.where(Z[:, 1] > 0, red, curve(Z[:, 0]))
+    return SimpleNamespace(routine=SimpleNamespace(encode=lambda X: X), forward=SimpleNamespace(surprise=surprise))
+
+
+@pytest.mark.parametrize("curve, red, changes, expected", [
+    (lambda p: p, .5, {}, dict(hit=True, bracketed=True)),                                  # Mitte getroffen
+    (lambda p: p, 1., {}, dict(hit=True, bracketed=True, p_global=1.)),                     # oberer Rand getroffen
+    (lambda p: p, .1, {}, dict(hit=True, bracketed=True, p_global=.1)),                     # unterer Rand getroffen
+    (lambda p: p, 5., {}, dict(hit=False, bracketed=False, p_global=1., evals=1)),          # Ziel oberhalb von f(1)
+    (lambda p: p, .01, {}, dict(hit=False, bracketed=False, p_global=.1, evals=2)),         # Ziel unterhalb von f(0,1)
+    (lambda p: p, .3, dict(pglobal_tol=1e-9, pglobal_max_iter=3),
+     dict(hit=False, bracketed=True, evals=5)),                                             # max_iter erschöpft
+    (lambda p: np.where(p < 1., 0., 1.4), 1., dict(pglobal_tol=1e-9, pglobal_max_iter=3),
+     dict(hit=False, bracketed=True, p_global=1.)),                                         # Rückfall: oberer Rand
+])
+def test_find_p_global_reports_hit_and_bracketed_separately(monkeypatch, curve, red, changes, expected):
+    def fake_rollouts(routine, seed, tag, n_episodes, cfg, *, p_slip, red_active=False, stream=0):
+        traj = SimpleNamespace(obs=np.array([[p_slip, float(red_active)]]), actions=np.array([0]),
+                               disps=np.array([0]))
+        return [(None, traj)]
+    monkeypatch.setattr(run, "routine_rollouts", fake_rollouts)
+    r = find_p_global(0, dataclasses.replace(TINY, **changes), _fake_p1(curve, red))
+    assert set(r) == {"p_global", "red_surprise", "hit", "bracketed", "evals"}
+    assert type(r["hit"]) is bool and type(r["bracketed"]) is bool and r["red_surprise"] == red
+    assert {k: r[k] for k in expected} == expected
+    assert json.loads(json.dumps(r)) == r
+
+
 def test_parse_seeds():
     assert parse_seeds("400-402") == [400, 401, 402] and parse_seeds("0") == [0] and parse_seeds("1,5") == [1, 5]
 
@@ -57,9 +98,9 @@ def test_streams_share_maps_before_switch(tiny_phase1):
 def test_find_p_global_plain_and_reproducible(tiny_phase1):
     a = find_p_global(0, TINY, tiny_phase1)
     assert a == find_p_global(0, TINY, tiny_phase1)
-    assert set(a) == {"p_global", "red_surprise", "bracketed", "evals"}
+    assert set(a) == {"p_global", "red_surprise", "hit", "bracketed", "evals"}
     assert type(a["p_global"]) is float and type(a["red_surprise"]) is float
-    assert type(a["bracketed"]) is bool and type(a["evals"]) is int
+    assert type(a["hit"]) is bool and type(a["bracketed"]) is bool and type(a["evals"]) is int
     assert TINY.p_slip <= a["p_global"] <= 1. and 2 <= a["evals"] <= 2 + TINY.pglobal_max_iter
     assert json.loads(json.dumps(a)) == a
 
@@ -100,7 +141,7 @@ def test_run_seed_content():
                        "total_sec"]
     assert r["seed"] == 0 and r["config"] == TINY.as_dict() and r["premise"]["ok"] is True
     assert set(r["calibration"]) == {"m3_threshold", "cusum_k", "cusum_h"}
-    assert set(r["p_global"]) == {"p_global", "red_surprise", "bracketed", "evals"}
+    assert set(r["p_global"]) == {"p_global", "red_surprise", "hit", "bracketed", "evals"}
     assert 0 < r["phase1_sec"] <= r["total_sec"]
 
 
