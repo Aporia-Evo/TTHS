@@ -6,7 +6,7 @@ import pytest
 import farbversuch.monitor as monitor
 from farbversuch import seeds
 from farbversuch.forward import ForwardModel
-from farbversuch.monitor import FitStats, Monitor, SYSTEMS
+from farbversuch.monitor import FitStats, Monitor, SYSTEMS, cusum_trace, m3_trace
 from farbversuch.world import CH_COLOR, DELTAS, OBS_DIM, obs_index
 
 
@@ -160,3 +160,76 @@ def test_real_explainers_find_the_slippery_colour_feature():
     for name in ("M3-B", "S1-B"):
         assert [o["name"] for o in r[name]["opened"]] == ["Farbe 0"]
     assert r["M3-B"]["n_fits"] > 0 and r["S1-B"]["n_fits"] == 0
+
+
+class SeqFwd:
+    """Vorwärtsmodell-Attrappe: liefert die vorgegebene Überraschung Schritt für Schritt der Reihe nach."""
+    def __init__(self, values): self._values = iter(values)
+    def surprise(self, Z, A, D): return np.array([next(self._values)])
+
+
+def run_stream(episodes, **kw):
+    mon = Monitor(lambda X: X[..., :3].astype(float), SeqFwd(np.concatenate(episodes)), seed=0,
+                  systems=("M3-B", "S1-B"), **kw)
+    for ep in episodes:
+        for _ in ep:
+            mon.add_step(np.zeros(OBS_DIM, np.uint8), 0, 1)
+        mon.end_episode()
+    return mon.results()
+
+
+def offline_m3(episodes, threshold, window, interval):
+    return next((E for E, v in m3_trace(episodes, window, interval) if v > threshold), None)
+
+
+def offline_s1(episodes, k, h):
+    alarm = np.flatnonzero(cusum_trace(np.concatenate(episodes), k) > h)
+    if len(alarm) == 0:
+        return None
+    return int(np.searchsorted(np.cumsum([len(e) for e in episodes]), alarm[0], side="right")) + 1
+
+
+def test_live_noticing_equals_the_offline_traces_on_random_streams(quiet):
+    rng = np.random.default_rng(0)
+    m3_seen, s1_seen = [], []
+    for i in range(20):
+        episodes = [rng.random(int(rng.integers(1, 9))) * 2 for _ in range(int(rng.integers(30, 60)))]
+        window, interval = int(rng.integers(10, 40)), int(rng.integers(2, 6))
+        buffer_size = window + int(rng.integers(0, window))        # Fenster <= Puffer < alle Schritte
+        flat = np.concatenate(episodes)
+        assert buffer_size < len(flat)
+        values = sorted(v for _, v in m3_trace(episodes, window, interval))
+        if i % 4 == 0:
+            threshold = values[-1] + .1                                 # nie über der Schwelle
+        else:
+            j = int(rng.integers(0, len(values) - 1))                   # Schwelle zwischen zwei Prüfwerten
+            assert values[j + 1] - values[j] > 1e-9
+            threshold = (values[j] + values[j + 1]) / 2
+        k = float(flat.mean())
+        peak = cusum_trace(flat, k).max()
+        h = peak * 1.01 + .01 if i % 4 == 1 else float(peak * rng.uniform(.3, .9))
+        r = run_stream(episodes, m3_threshold=threshold, cusum_k=k, cusum_h=h, window=window, interval=interval,
+                       buffer_size=buffer_size)
+        m3_seen.append(offline_m3(episodes, threshold, window, interval))
+        s1_seen.append(offline_s1(episodes, k, h))
+        assert r["M3-B"]["noticed"] == m3_seen[-1] and r["S1-B"]["noticed"] == s1_seen[-1]
+    for seen in (m3_seen, s1_seen):                                     # der Vergleich ist nicht leer
+        assert None in seen and len({e for e in seen if e is not None}) >= 3
+
+
+def test_m3_averages_the_last_window_steps_of_a_larger_buffer(quiet):
+    episodes = [np.zeros(5)] * 20 + [np.ones(5)] * 10                   # 100 niedrige, dann hohe Schritte
+    r = run_stream(episodes, m3_threshold=.5, cusum_k=.5, cusum_h=1e9, window=10, interval=5, buffer_size=100)
+    assert r["M3-B"]["noticed"] == offline_m3(episodes, .5, 10, 5) == 25    # der ganze Puffer läge bei 0,2
+
+
+def test_alarms_need_strictly_more_than_the_threshold(quiet):
+    ones = [np.ones(2)] * 10
+    common = dict(cusum_k=1., cusum_h=1., window=4, interval=5, buffer_size=10)
+    assert run_stream(ones, m3_threshold=1., **common)["M3-B"]["noticed"] is None        # Mittel == Schwelle
+    assert run_stream(ones, m3_threshold=np.nextafter(1., 0.), **common)["M3-B"]["noticed"] == 5
+    single = [np.ones(1)] * 6                                           # CUSUM 0,5 / 1,0 / 1,5 mit k = 0,5
+    common = dict(m3_threshold=99., cusum_k=.5, window=4, interval=5, buffer_size=10)
+    assert run_stream(single, cusum_h=1., **common)["S1-B"]["noticed"] == 3             # 1,0 == h löst nicht aus
+    assert run_stream(single, cusum_h=np.nextafter(1., 0.), **common)["S1-B"]["noticed"] == 2
+    assert run_stream(single, cusum_h=1.5, **common)["S1-B"]["noticed"] == 4              # 1,5 == h, erst 2,0 löst aus

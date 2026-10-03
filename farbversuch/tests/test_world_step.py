@@ -66,3 +66,11 @@ def test_rollout_records_pre_step_obs():
     m = make_map(np.random.default_rng(6), 0.15)
     t = rollout(m, lambda o, p: 1, np.random.default_rng(0), 0.1, False)
     assert (t.obs[0] == observe(m, m.start)).all() and tuple(t.positions[0]) == m.start
+
+
+def test_rollout_records_the_chosen_action_not_the_executed_one():
+    runs = [rollout(make_map(np.random.default_rng(e), 0.15), lambda o, p: 1, np.random.default_rng(100 + e),
+                    0.5, False) for e in range(5)]
+    actions, disps = (np.concatenate([getattr(t, k) for t in runs]) for k in ("actions", "disps"))
+    assert (actions == 1).all()                      # Aktion 1 = unten, immer gewählt und gespeichert
+    assert (disps != 2).any() and {1, 3, 4} & set(disps.tolist())    # ausgeführt wurde teils eine andere Richtung
