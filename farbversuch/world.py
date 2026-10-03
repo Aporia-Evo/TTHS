@@ -1,5 +1,6 @@
-"""Gitterwelt: Karte, Beobachtung (Schrittdynamik folgt in einer späteren Aufgabe)."""
+"""Gitterwelt: Karte, Beobachtung, Schrittdynamik (Rutschen, Rot-Effekt) und Rollout."""
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -11,6 +12,9 @@ N_COLORS, C_SPECIAL = 4, 0
 CH_WALL, CH_GOAL, CH_COLOR = 0, 1, (2, 3, 4, 5)       # Kanäle je Fensterzelle
 OBS_DIM = 298
 GOALDIR = (294, 295, 296, 297)                        # Ziel oben, unten, links, rechts
+# Verschiebungsklassen: 0 geblockt, 1-4 ein Schritt (Aktion + 1), 5-8 Doppelschritt (Aktion + 5)
+DISP = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1), (-2, 0), (2, 0), (0, -2), (0, 2))
+N_DISP = 9
 
 _CELLS = VIEW * VIEW
 
@@ -96,3 +100,59 @@ def observe(m: Map, pos: tuple[int, int]) -> np.ndarray:
         o[ch * _CELLS:(ch + 1) * _CELLS] = (win_colors == k).ravel()
     o[list(GOALDIR)] = (gr < r, gr > r, gc < c, gc > c)
     return o
+
+
+def disp_class(dr: int, dc: int) -> int:
+    """Klasse einer Verschiebung; ValueError, wenn sie nicht in DISP vorkommt."""
+    return DISP.index((dr, dc))
+
+
+def step(m: Map, pos: tuple[int, int], action: int, rng: np.random.Generator,
+         p_slip: float, red_active: bool, red_p: float = 0.5) -> tuple[tuple[int, int], int]:
+    """Ein Schritt: (neue Position, Verschiebungsklasse). Zieht immer genau drei Zahlen."""
+    u_slip = rng.random()
+    a_rand = int(rng.integers(N_ACTIONS))
+    u_red = rng.random()
+    a = a_rand if u_slip < p_slip else action
+    dr, dc = DELTAS[a]
+    new = (pos[0] + dr, pos[1] + dc)
+    if m.walls[new]:
+        new = (pos[0], pos[1])
+    elif red_active and m.colors[new] == C_SPECIAL and u_red < red_p:
+        beyond = (new[0] + dr, new[1] + dc)           # der Rand ist Wand, also im Gitter
+        if not m.walls[beyond]:
+            new = beyond
+    return new, disp_class(new[0] - pos[0], new[1] - pos[1])
+
+
+@dataclass
+class Traj:
+    obs: np.ndarray          # (T,298) uint8, vor dem Schritt
+    actions: np.ndarray      # (T,) gewählte Aktion
+    disps: np.ndarray        # (T,) Verschiebungsklasse
+    positions: np.ndarray    # (T,2) vor dem Schritt
+    reached: bool
+
+
+def rollout(m: Map, choose: Callable[[np.ndarray, tuple[int, int]], int], rng: np.random.Generator,
+            p_slip: float, red_active: bool, max_steps: int = 40, red_p: float = 0.5) -> Traj:
+    """Spielt bis zum Ziel oder max_steps. Das Ziel zählt nur auf der Endposition eines Schritts."""
+    obs, actions, disps, positions = [], [], [], []
+    pos, reached = m.start, False
+    for _ in range(max_steps):
+        o = observe(m, pos)
+        a = int(choose(o, pos))
+        new, cls = step(m, pos, a, rng, p_slip, red_active, red_p)
+        obs.append(o)
+        actions.append(a)
+        disps.append(cls)
+        positions.append(pos)
+        pos = new
+        if pos == m.goal:
+            reached = True
+            break
+    return Traj(np.array(obs, dtype=np.uint8).reshape(-1, OBS_DIM),
+                np.array(actions, dtype=int),
+                np.array(disps, dtype=int),
+                np.array(positions, dtype=int).reshape(-1, 2),
+                reached)
