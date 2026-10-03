@@ -77,12 +77,25 @@ def _aggregate(condition: str, pairs: list[tuple[dict, dict]]) -> dict:
     }
 
 
+def _require_identical(rs: Sequence[dict], key: str, label: str) -> None:
+    """Ergebnisse verschiedener Konfigurationen oder Umgebungen (BLAS-Threads!) sind nicht vergleichbar.
+    Ein fehlender Schlüssel zählt als None."""
+    if len(rs) < 2:
+        return
+    first = rs[0].get(key)
+    differing = [r["seed"] for r in rs if r.get(key) != first]
+    if differing:
+        raise ValueError(f"{label} weicht von Seed {rs[0]['seed']} ab bei Seeds {differing}")
+
+
 def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
     by_seed = {r["seed"]: r for r in results}
     missing = [s for s in seeds if s not in by_seed]
     if missing:
         raise ValueError(f"kein Ergebnis für Seeds {missing}")
     rs = [by_seed[s] for s in seeds]
+    _require_identical(rs, "config", "Konfiguration")
+    _require_identical(rs, "env", "Umgebung (env)")
     ok = [r for r in rs if r["premise"]["ok"]]
     failed = [r["seed"] for r in rs if not r["premise"]["ok"]]
 

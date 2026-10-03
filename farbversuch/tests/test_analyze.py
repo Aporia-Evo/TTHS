@@ -203,3 +203,34 @@ def test_main_prints_markdown(tmp_path, capsys):
     assert "P2" in out and "M3-B" in out
     with pytest.raises(FileNotFoundError, match="seed_403"):
         main(["--results", str(tmp_path), "--seeds", "400-403"])
+
+
+def test_evaluate_requires_identical_config_and_env():
+    seeds = [400, 401, 402]
+    env = {"OMP_NUM_THREADS": "1", "numpy": "2.4.0"}
+
+    def results(**changes):
+        rs = [{**fake_result(s), "env": dict(env)} for s in seeds]
+        for seed, change in changes.items():
+            rs[seeds.index(int(seed[1:]))].update(change)
+        return rs
+
+    assert evaluate(results(), seeds)["P2"]["count"] == 3
+    with pytest.raises(ValueError, match="Konfiguration.*401") as exc:
+        evaluate(results(s401={"config": {"switch_episode": 100, "n_deploy_episodes": 300}}), seeds)
+    assert "402" not in str(exc.value)
+    with pytest.raises(ValueError, match="Umgebung.*402") as exc:
+        evaluate(results(s402={"env": {**env, "OMP_NUM_THREADS": "3"}}), seeds)
+    assert "401" not in str(exc.value)
+    with pytest.raises(ValueError, match="Umgebung.*401.*402"):       # fehlendes "env" zählt als None
+        evaluate(results(s401={"env": None}, s402={"env": {"numpy": "9"}}), seeds)
+    plain = [fake_result(s) for s in seeds]                           # alle ohne "env": einheitlich None
+    assert evaluate(plain, seeds)["P2"]["count"] == 3
+    mixed = [fake_result(400), {**fake_result(401), "env": env}, fake_result(402)]
+    with pytest.raises(ValueError, match="Umgebung.*401"):
+        evaluate(mixed, seeds)
+
+
+def test_evaluate_compares_only_the_listed_seeds():
+    results = [fake_result(s) for s in (400, 401)] + [{**fake_result(999), "env": {"other": 1}}]
+    assert evaluate(results, [400, 401])["P2"]["count"] == 2

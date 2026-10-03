@@ -1,15 +1,13 @@
 import dataclasses
 import json
 import os
-import subprocess
-import sys
-from pathlib import Path
+import platform
 
 import numpy as np
 import pytest
 
-from farbversuch.run import (CONDITIONS, bisect_to_target, deploy, find_p_global, main, parse_seeds, run_seed,
-                             stream_episodes)
+from farbversuch.run import (CONDITIONS, THREAD_VARS, bisect_to_target, deploy, env_block, find_p_global, main,
+                             parse_seeds, run_seed, stream_episodes)
 from farbversuch.tests.helpers import TINY
 
 
@@ -75,17 +73,31 @@ def test_deploy_reproducible_and_complete(tiny_phase1):
     assert strip(a) == strip(deploy(0, TINY, tiny_phase1, .4, "global"))
 
 
+def test_env_block_is_plain_and_reflects_the_environment(monkeypatch):
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    monkeypatch.setenv("OPENBLAS_NUM_THREADS", "3")
+    monkeypatch.delenv("MKL_NUM_THREADS", raising=False)
+    env = env_block()
+    assert set(env) == {*THREAD_VARS, "numpy", "blas", "python"}
+    assert (env["OMP_NUM_THREADS"], env["OPENBLAS_NUM_THREADS"], env["MKL_NUM_THREADS"]) == ("1", "3", None)
+    assert env["numpy"] == np.__version__ and env["python"] == platform.python_version()
+    assert env["blas"] is None or (type(env["blas"]) is str and env["blas"])
+    assert json.loads(json.dumps(env)) == env
+
+
 @pytest.mark.slow
 def test_run_seed_schema():
     r = run_seed(0, TINY)
     assert set(r["conditions"]) == set(CONDITIONS) and set(r["conditions"]["red"]) == set(TINY.systems)
+    assert set(r["env"]) == {*THREAD_VARS, "numpy", "blas", "python"}
     assert json.loads(json.dumps(r)) == r
 
 
 @pytest.mark.slow
 def test_run_seed_content():
     r = run_seed(0, TINY)
-    assert list(r) == ["seed", "config", "premise", "calibration", "p_global", "conditions", "phase1_sec", "total_sec"]
+    assert list(r) == ["seed", "config", "env", "premise", "calibration", "p_global", "conditions", "phase1_sec",
+                       "total_sec"]
     assert r["seed"] == 0 and r["config"] == TINY.as_dict() and r["premise"]["ok"] is True
     assert set(r["calibration"]) == {"m3_threshold", "cusum_k", "cusum_h"}
     assert set(r["p_global"]) == {"p_global", "red_surprise", "bracketed", "evals"}
@@ -107,18 +119,25 @@ def test_cli_writes_and_skips(tmp_path):
 
 
 @pytest.mark.slow
-def test_cli_parallel_matches_pinned_serial(tmp_path, monkeypatch):
-    threads = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
-    for k in threads:
+def test_cli_pins_blas_threads_even_with_one_job(tmp_path, monkeypatch):
+    for k in THREAD_VARS:
         monkeypatch.setenv(k, "8")               # monkeypatch stellt nach dem Test wieder her
     cfg = tmp_path / "c.json"; TINY.to_json(cfg)
-    main(["--config", str(cfg), "--seeds", "0-1", "--out", str(tmp_path / "par"), "--jobs", "2"])
-    assert [os.environ[k] for k in threads] == ["1"] * 3 and (tmp_path / "par" / "seed_0.json").exists()
-    # Die BLAS-Threadzahl ändert die Gleitkommareihenfolge: Vergleich nur mit einem seriellen Lauf bei einem Thread
-    env = {**os.environ, **dict.fromkeys(threads, "1")}
-    subprocess.run([sys.executable, "-m", "farbversuch.run", "--config", str(cfg), "--seeds", "1", "--out",
-                    str(tmp_path / "ser")], check=True, capture_output=True, env=env,
-                   cwd=Path(__file__).resolve().parents[2])
+    main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o")])
+    r = json.loads((tmp_path / "o" / "seed_0.json").read_text())
+    assert [os.environ[k] for k in THREAD_VARS] == ["1"] * 3
+    assert [r["env"][k] for k in THREAD_VARS] == ["1"] * 3          # so gesehen im Worker
+
+
+@pytest.mark.slow
+def test_cli_parallel_matches_serial(tmp_path, monkeypatch):
+    for k in THREAD_VARS:
+        monkeypatch.setenv(k, "8")
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    base = ["--config", str(cfg)]
+    main([*base, "--seeds", "0-1", "--out", str(tmp_path / "par"), "--jobs", "2"])
+    assert (tmp_path / "par" / "seed_0.json").exists()
+    main([*base, "--seeds", "1", "--out", str(tmp_path / "ser")])    # --jobs 1: ebenfalls im festgelegten Worker
 
     def strip(x):
         return {k: strip(v) for k, v in x.items() if not k.endswith("_sec")} if isinstance(x, dict) else x

@@ -4,6 +4,7 @@ import argparse
 import json
 import multiprocessing
 import os
+import platform
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -20,6 +21,8 @@ from farbversuch.seeds import (DEPLOY, FORWARD, INIT, INVARIANCE, NULL, PGLOBAL,
 from farbversuch.world import N_DISP, Map, Traj, bfs_distances, make_map, observe, recolor, rollout
 
 CONDITIONS = ("none", "red", "global", "walls")
+# Die BLAS-Threadzahl ändert die Gleitkommareihenfolge und damit die Ergebnisse: immer ein Thread
+THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
 
 def env_params(cfg: Config, condition: str, episode: int, p_global: float) -> tuple[float, float, bool]:
@@ -195,11 +198,22 @@ def deploy(seed: int, cfg: Config, p1: Phase1, p_global: float, condition: str) 
     return monitor.results()
 
 
+def _blas_id() -> str | None:
+    blas = np.show_config(mode="dicts").get("Build Dependencies", {}).get("blas", {})
+    return " ".join(str(blas[k]) for k in ("name", "version") if blas.get(k)) or None
+
+
+def env_block() -> dict:
+    """Umgebung, in der gerechnet wurde (Threadvariablen so, wie dieser Prozess sie sieht)."""
+    return {**{var: os.environ.get(var) for var in THREAD_VARS}, "numpy": np.__version__, "blas": _blas_id(),
+            "python": platform.python_version()}
+
+
 def run_seed(seed: int, cfg: Config) -> dict:
     t0 = time.perf_counter()
     p1 = phase1(seed, cfg)
     premise = premise_checks(seed, cfg, p1)
-    result = {"seed": int(seed), "config": cfg.as_dict(), "premise": premise,
+    result = {"seed": int(seed), "config": cfg.as_dict(), "env": env_block(), "premise": premise,
               "calibration": {"m3_threshold": float(p1.m3_threshold), "cusum_k": float(p1.cusum_k),
                               "cusum_h": float(p1.cusum_h)},
               "p_global": None, "conditions": None, "phase1_sec": float(p1.sec)}
@@ -242,19 +256,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--jobs", type=int, default=1)
     args = ap.parse_args(argv)
 
+    for var in THREAD_VARS:                      # vor dem Start der Worker: sie erben sie vor dem Import von numpy
+        os.environ[var] = "1"
     cfg = Config.from_json(args.config) if args.config else Config()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     todo = [(s, cfg, str(out)) for s in parse_seeds(args.seeds) if not (out / f"seed_{s}.json").exists()]
-    if args.jobs > 1:
-        for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
-            os.environ[var] = "1"
-        with multiprocessing.get_context("spawn").Pool(args.jobs) as pool:
+    if todo:                                     # auch --jobs 1 läuft in einem frisch gestarteten Worker
+        with multiprocessing.get_context("spawn").Pool(max(1, args.jobs)) as pool:
             for seed in pool.imap_unordered(_run_and_write, todo):
                 print(f"seed {seed} fertig", flush=True)
-    else:
-        for task in todo:
-            print(f"seed {_run_and_write(task)} fertig", flush=True)
 
 
 if __name__ == "__main__":
