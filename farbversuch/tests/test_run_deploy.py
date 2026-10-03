@@ -2,6 +2,7 @@ import dataclasses
 import json
 import os
 import platform
+import re
 from types import SimpleNamespace
 
 import numpy as np
@@ -146,9 +147,25 @@ def test_run_seed_content():
 
 
 @pytest.mark.slow
-def test_premise_failure_stops_seed():
+def test_premise_failure_stops_seed(capsys):
     r = run_seed(0, dataclasses.replace(TINY, min_invariance=1.01))
     assert r["premise"]["ok"] is False and r["conditions"] is None and r["p_global"] is None
+    lines = capsys.readouterr().err.splitlines()
+    assert len(lines) == 2 and "Prämisse nicht erfüllt" in lines[1]          # keine Bedingungszeilen
+
+
+@pytest.mark.slow
+def test_run_seed_logs_progress_to_stderr(capsys):
+    r = run_seed(3, TINY)
+    cap = capsys.readouterr()
+    lines = cap.err.splitlines()
+    assert cap.out == "" and all(re.match(r"\d\d:\d\d:\d\d seed 3 ", ln) for ln in lines)
+    assert len(lines) == 2 + len(CONDITIONS)
+    assert "gestartet" in lines[0]
+    assert "Phase 1 fertig" in lines[1] and "Prämisse ok" in lines[1]
+    for cond, ln in zip(CONDITIONS, lines[2:]):
+        assert re.search(rf"Bedingung {cond} fertig \(\d+ s", ln)
+    assert set(r["conditions"]) == set(CONDITIONS)                            # Ergebnis unverändert
 
 
 @pytest.mark.slow

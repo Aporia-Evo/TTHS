@@ -222,17 +222,29 @@ def env_block() -> dict:
             "python": platform.python_version()}
 
 
+def _log(msg: str) -> None:
+    """Fortschritt für lange Läufe; nach stderr, damit stdout und Ergebnisse unberührt bleiben."""
+    print(f"{time.strftime('%H:%M:%S')} {msg}", file=sys.stderr, flush=True)
+
+
 def run_seed(seed: int, cfg: Config) -> dict:
     t0 = time.perf_counter()
+    _log(f"seed {seed} gestartet")
     p1 = phase1(seed, cfg)
     premise = premise_checks(seed, cfg, p1)
+    _log(f"seed {seed} Phase 1 fertig ({p1.sec:.0f} s), Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'}")
     result = {"seed": int(seed), "config": cfg.as_dict(), "env": env_block(), "premise": premise,
               "calibration": {"m3_threshold": float(p1.m3_threshold), "cusum_k": float(p1.cusum_k),
                               "cusum_h": float(p1.cusum_h)},
               "p_global": None, "conditions": None, "phase1_sec": float(p1.sec)}
     if premise["ok"]:
         result["p_global"] = find_p_global(seed, cfg, p1)
-        result["conditions"] = {c: deploy(seed, cfg, p1, result["p_global"]["p_global"], c) for c in CONDITIONS}
+        result["conditions"] = {}
+        for c in CONDITIONS:
+            t1 = time.perf_counter()
+            result["conditions"][c] = deploy(seed, cfg, p1, result["p_global"]["p_global"], c)
+            now = time.perf_counter()
+            _log(f"seed {seed} Bedingung {c} fertig ({now - t1:.0f} s, seit Start {now - t0:.0f} s)")
     result["total_sec"] = time.perf_counter() - t0
     return result
 
