@@ -1,10 +1,12 @@
 """Monitor: Ringpuffer, Kandidatenmerkmale (Arm A: Beobachtungsbit UND Aktion, Arm B: Zielzelle der Aktion),
-Bemerken (M3, CUSUM) und Kalibrierung an Null-Strömen."""
+Bemerken (M3, CUSUM), Kalibrierung an Null-Strömen und Erklären per Modellvergleich (M3)."""
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
-from farbversuch.world import CH_COLOR, CH_GOAL, CH_WALL, DELTAS, N_ACTIONS, OBS_DIM, obs_index
+from farbversuch.forward import fit_logreg, fwd_design, mean_loglik
+from farbversuch.world import CH_COLOR, CH_GOAL, CH_WALL, DELTAS, N_ACTIONS, N_DISP, OBS_DIM, obs_index
 
 
 class RingBuffer:
@@ -122,3 +124,61 @@ def calibrate_cusum(null_streams: Sequence[Sequence[np.ndarray]], sd_factor: flo
     k = float(pooled.mean() + sd_factor * pooled.std())
     h = null_threshold([cusum_trace(s, k).max() for s in streams], max_alarms)
     return k, h
+
+
+@dataclass
+class FitStats:
+    n_fits: int = 0
+    size: int = 0            # Summe (Parameterzahl x Trainingszeilen)
+
+    def add(self, d: int, n_train: int) -> None:
+        self.n_fits += 1
+        self.size += d * N_DISP * n_train
+
+
+def cv_folds(n: int, rng: np.random.Generator, n_folds: int = 5) -> list[np.ndarray]:
+    """Testindizes der Teilungen: eine Permutation, in n_folds Teile gespalten."""
+    return np.array_split(rng.permutation(n), n_folds)
+
+
+def select_m3(imp: np.ndarray, candidates: Sequence[int]) -> int | None:
+    """imp: (len(candidates), n_folds). Größte mittlere Verbesserung unter Kandidaten mit imp > 0 in allen
+    Teilungen; bei Gleichstand der kleinere Index."""
+    imp, cand = np.asarray(imp), np.asarray(candidates)
+    ok = np.flatnonzero((imp > 0).all(axis=1))
+    if len(ok) == 0:
+        return None
+    means = imp[ok].mean(axis=1)
+    return int(cand[ok[means == means.max()]].min())
+
+
+def m3_explain(Z, A, D, F, opened: Sequence[int], rng: np.random.Generator, l2: float = 1e-3, n_folds: int = 5,
+               tol: float = 1e-6, max_iter: int = 500, stats: FitStats | None = None) -> int | None:
+    """Kreuzvalidierter Vergleich Basismodell gegen Basis + je ein Kandidat; liefert den zu öffnenden Kandidaten."""
+    D = np.asarray(D, dtype=np.intp)
+    opened = np.asarray(opened, dtype=np.intp)
+    folds = cv_folds(len(A), rng, n_folds)
+    Xb = fwd_design(Z, A, F[:, opened])
+    d = Xb.shape[1]
+    candidates = np.setdiff1d(np.arange(F.shape[1]), opened)
+    imp = np.zeros((len(candidates), len(folds)))
+    for f, test in enumerate(folds):
+        train = np.setdiff1d(np.arange(len(A)), test)
+        Xb_tr, Xb_te, y_tr, y_te = Xb[train], Xb[test], D[train], D[test]
+        Wb, _ = fit_logreg(Xb_tr, y_tr, N_DISP, l2, tol=tol, max_iter=max_iter)
+        if stats is not None:
+            stats.add(d, len(train))
+        llb = mean_loglik(Xb_te, y_te, Wb)
+        F_tr, F_te = F[train][:, candidates], F[test][:, candidates]
+        varying = F_tr.min(axis=0) != F_tr.max(axis=0)   # konstante Spalten: Verbesserung exakt 0, keine Anpassung
+        W0 = np.vstack([Wb, np.zeros((1, N_DISP))])
+        Xe_tr = np.empty((len(train), d + 1)); Xe_tr[:, :d] = Xb_tr
+        Xe_te = np.empty((len(test), d + 1)); Xe_te[:, :d] = Xb_te
+        for j in np.flatnonzero(varying):
+            Xe_tr[:, d] = F_tr[:, j]
+            Xe_te[:, d] = F_te[:, j]
+            We, _ = fit_logreg(Xe_tr, y_tr, N_DISP, l2, W0=W0, tol=tol, max_iter=max_iter)
+            if stats is not None:
+                stats.add(d + 1, len(train))
+            imp[j, f] = mean_loglik(Xe_te, y_te, We) - llb
+    return select_m3(imp, candidates.tolist())
