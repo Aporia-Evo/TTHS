@@ -8,7 +8,7 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`.
 
 - **Code fertig:** Tasks 1–14 sind umgesetzt (subagent-gesteuert, jede Aufgabe einzeln geprüft und abgenommen).
 - **Gesamtprüfung und Korrekturrunde:** Danach lief eine Gesamtprüfung des Branches. Sie fand 0 kritische und 3 wichtige Punkte; alle sind korrigiert und nachgeprüft (sechs Commits `1a95e1b`…`495fe60`).
-- **Tests:** 147 Tests, alle grün und ohne Warnungen. Ohne die langsamen: `python -m pytest -q -m "not slow"` gibt 131 passed in ca. 2 s.
+- **Tests:** 189 Tests, alle grün und ohne Warnungen. Ohne die langsamen: `python -m pytest -q -m "not slow"` gibt 173 passed in ca. 2 s.
 - **Offen:** Task 15 (Pilot), Task 16 (Einfrieren + Hauptlauf), Task 17 (Auswertung + Bericht).
 - **Bewusst angehalten:** Vor dem Pilot stehen Entscheidungen des Nutzers an (siehe unten). Eine Spec-Änderung würde einen jetzt gelaufenen Pilot entwerten.
 
@@ -61,7 +61,8 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`.
 
 ## Bekannte kleinere Punkte (bewusst gelassen)
 
-- `freeze verify` meldet „OK“ bei leerer Prüfsummendatei, und nach dem Einfrieren hinzugefügte Dateien werden nicht erkannt. Zwischen Einfrieren und Prüfung darf sich kein Code ändern.
+- **Seeds werden geprüft:** Doppelte Seeds weist `parse_seeds` (CLI von `run` und `analyze`) und `evaluate` mit `ValueError` ab; der Temp-Dateiname je Seed enthält die Prozess-ID.
+- **Explorative Auswertung:** Die vorregistrierten Urteile (P2–P5, Abbruch) gibt `evaluate` nur für genau die Seeds 400–409 aus (`"preregistered": True`). Bei anderen Seeds (z. B. Pilot Seed 0) stehen Zahlen und Kennzahlen, aber die Urteile sind `None`; der Bericht beginnt mit dem Hinweis „Explorative Auswertung“ und zeigt „–“ statt erfüllt/nicht erfüllt.
 - Stürzt ein Seed im Hauptlauf ab, beendet das auch die parallel laufenden Seeds. Dann anhalten und den Nutzer fragen.
 - Plan- und Spec-Text zeigen bei den Punkten oben noch den alten Stand. Maßgeblich sind die Abweichungen in diesem Dokument.
 
