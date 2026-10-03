@@ -2,6 +2,7 @@
 Monitor sehen nur Beobachtungen, Aktionen und Verschiebungen. Üben (Phase 1), Prämissen, p_global, Einsatz, CLI."""
 import argparse
 import json
+import math
 import multiprocessing
 import os
 import platform
@@ -14,12 +15,14 @@ from pathlib import Path
 
 import numpy as np
 
+from farbversuch.closure import color_restanteil, representation_shift
 from farbversuch.config import Config
 from farbversuch.forward import ForwardModel, freq_surprise
-from farbversuch.monitor import Monitor, calibrate_cusum, calibrate_m3
+from farbversuch.monitor import (SYSTEMS, Monitor, calibrate_cusum, calibrate_m3, candidate_name, candidates_A,
+                                 candidates_B, m3_null_gain, null_threshold, pre_open_m3, pre_open_s1)
 from farbversuch.routine import Routine, teacher_action, train_routine
-from farbversuch.seeds import (DEPLOY, FORWARD, INIT, INVARIANCE, NULL, PGLOBAL, PREMISE_FWD, RECOLOR, TEACHER,
-                              episode_rngs, rng)
+from farbversuch.seeds import (DELTA, DEPLOY, FORWARD, INIT, INVARIANCE, NULL, PGLOBAL, PREMISE_FWD, PREOPEN, PROBE,
+                              RECOLOR, TEACHER, episode_rngs, rng)
 from farbversuch.world import N_DISP, Map, Traj, bfs_distances, make_map, observe, recolor, rollout
 
 CONDITIONS = ("none", "red", "global", "walls")
@@ -76,6 +79,12 @@ class Phase1:
     m3_threshold: float
     cusum_k: float
     cusum_h: float
+    practice_obs: np.ndarray        # Übungspuffer: letzte buffer_size Schritte der Vorwärtsdaten
+    practice_actions: np.ndarray
+    practice_disps: np.ndarray
+    practice_episodes: np.ndarray   # Episoden-ID (Index in den Vorwärts-Rollouts) je Schritt
+    practice: dict[str, list[int]]  # Übungs-Ontologie je System in cfg.systems
+    deltas: dict[str, float]        # Mindestverbesserung je M3-System in cfg.systems
     sec: float
 
 
@@ -84,49 +93,126 @@ def _stack(rollouts: list[tuple[Map, Traj]]) -> tuple[np.ndarray, np.ndarray, np
             np.concatenate([t.disps for _, t in rollouts]))
 
 
+def _fit_kw(cfg: Config) -> dict:
+    return dict(l2=cfg.fwd_l2, n_folds=cfg.n_folds, tol=cfg.logreg_tol, max_iter=cfg.logreg_max_iter)
+
+
+def _candidates(arm: str, obs: np.ndarray, actions: np.ndarray) -> np.ndarray:
+    return (candidates_B if arm == "B" else candidates_A)(obs, actions)
+
+
+def calibrate_delta(buffers: Sequence[tuple], opened: Sequence[int],
+                    rng_for_buffer: Callable[[int], np.random.Generator], max_alarms: int, **fit_kw) -> float:
+    """δ eines M3-Systems: null_threshold über den Null-Gewinnen der Puffer; buffers[j] = (Z, A, D, F)."""
+    gains = [m3_null_gain(*buffers[j], opened, rng_for_buffer(j), **fit_kw) for j in range(len(buffers))]
+    return null_threshold(gains, max_alarms)
+
+
+def _pre_open_practice(seed: int, cfg: Config, forward: ForwardModel, Z: np.ndarray, obs: np.ndarray,
+                       actions: np.ndarray, disps: np.ndarray) -> dict[str, list[int]]:
+    """Übungs-Ontologie je System auf dem Übungspuffer: M3 greedy mit fester Mindestverbesserung, S1 Holm-Ablehnungen
+    auf der Überraschung des Phase-1-Vorwärtsmodells."""
+    S = forward.surprise(Z, actions, disps)
+    F: dict[str, np.ndarray] = {}                    # Kandidaten je Arm, nur einmal gebaut
+    practice: dict[str, list[int]] = {}
+    for name in cfg.systems:
+        kind, arm = name.split("-")
+        i = SYSTEMS.index(name)
+        if arm not in F:
+            F[arm] = _candidates(arm, obs, actions)
+        if kind == "M3":
+            practice[name] = pre_open_m3(Z, actions, disps, F[arm], lambda r, i=i: rng(seed, PREOPEN, i, r),
+                                         delta=cfg.pre_open_delta, max_open=cfg.max_pre_open, **_fit_kw(cfg))
+        else:
+            n_perm = cfg.n_perm if arm == "B" else cfg.n_perm_A
+            practice[name] = pre_open_s1(S, F[arm], rng(seed, PREOPEN, i, 0), n_perm, alpha=cfg.alpha,
+                                         max_open=cfg.max_pre_open, chunk=cfg.perm_chunk)
+    return practice
+
+
+def _calibrate_deltas(seed: int, cfg: Config, routine: Routine, null_buffers: Sequence[tuple],
+                      practice: dict[str, list[int]]) -> dict[str, float]:
+    """δ je M3-System aus den Puffern (obs, Aktionen, Verschiebungen) der Null-Ströme; Basis = Übungs-Ontologie."""
+    deltas: dict[str, float] = {}
+    for name in cfg.systems:
+        kind, arm = name.split("-")
+        if kind == "M3":
+            i = SYSTEMS.index(name)
+            buffers = [(routine.encode(obs), actions, disps, _candidates(arm, obs, actions))
+                       for obs, actions, disps in null_buffers]
+            deltas[name] = calibrate_delta(buffers, practice[name], lambda j, i=i: rng(seed, DELTA, i, j),
+                                           cfg.max_null_alarms, **_fit_kw(cfg))
+    return deltas
+
+
 def phase1(seed: int, cfg: Config) -> Phase1:
     t0 = time.perf_counter()
     X, A = teacher_data(seed, cfg)
     routine = train_routine(X, A, rng(seed, INIT), cfg.k, cfg.lr, cfg.epochs, cfg.wd, cfg.init_std)
 
-    X, A, D = _stack(routine_rollouts(routine, seed, FORWARD, cfg.n_forward_episodes, cfg, p_slip=cfg.p_slip))
+    runs = routine_rollouts(routine, seed, FORWARD, cfg.n_forward_episodes, cfg, p_slip=cfg.p_slip)
+    X, A, D = _stack(runs)
+    episodes = np.concatenate([np.full(len(t.actions), e) for e, (_, t) in enumerate(runs)])
     forward = ForwardModel.fit(routine.encode(X), A, D, l2=cfg.fwd_l2, tol=cfg.logreg_tol,
                                max_iter=cfg.logreg_max_iter)
     class_counts = np.bincount(D, minlength=N_DISP)
 
-    null_streams = []
+    n = cfg.buffer_size
+    p_obs, p_actions, p_disps, p_episodes = X[-n:], A[-n:], D[-n:], episodes[-n:]
+    practice = _pre_open_practice(seed, cfg, forward, routine.encode(p_obs), p_obs, p_actions, p_disps)
+
+    null_streams, null_buffers = [], []
     for j in range(cfg.n_null_streams):
         runs = routine_rollouts(routine, seed, NULL, cfg.n_null_episodes, cfg, p_slip=cfg.p_slip, stream=j)
         null_streams.append([forward.surprise(routine.encode(t.obs), t.actions, t.disps) for _, t in runs])
+        obs, actions, disps = _stack(runs)
+        null_buffers.append((obs[-n:], actions[-n:], disps[-n:]))
     m3_threshold = calibrate_m3(null_streams, window=cfg.notice_window, interval=cfg.check_interval,
                                 max_alarms=cfg.max_null_alarms)
     cusum_k, cusum_h = calibrate_cusum(null_streams, sd_factor=cfg.cusum_sd_factor, max_alarms=cfg.max_null_alarms)
-    return Phase1(routine, forward, class_counts, m3_threshold, cusum_k, cusum_h, time.perf_counter() - t0)
+    deltas = _calibrate_deltas(seed, cfg, routine, null_buffers, practice)
+    return Phase1(routine, forward, class_counts, m3_threshold, cusum_k, cusum_h, p_obs, p_actions, p_disps,
+                  p_episodes, practice, deltas, time.perf_counter() - t0)
 
 
-def color_invariance(seed: int, cfg: Config, routine: Routine) -> float:
-    """Anteil der Schritte, in denen die Aktion bei neu gezogenen Farben (gleiche Wände, Start, Ziel) gleich bleibt."""
+def invariance_and_shift(seed: int, cfg: Config, routine: Routine) -> tuple[float, float]:
+    """(Anteil der Schritte, in denen die Aktion bei neu gezogenen Farben (gleiche Wände, Start, Ziel) gleich bleibt;
+    Verschiebung von z: mittleres ||z - z'|| / mittleres ||z|| über die ersten cfg.n_shift_positions Positionen,
+    z' aus der umgefärbten Beobachtung derselben Position)."""
     same = total = 0
+    originals, recolored = [], []
     for e in range(cfg.n_invariance_maps):
         map_rng, dyn_rng = episode_rngs(seed, INVARIANCE, 0, e)
         m = make_map(map_rng, cfg.wall_p, cfg.min_dist)
         traj = rollout(m, lambda o, pos: routine.act(o), dyn_rng, cfg.p_slip, False, cfg.max_steps, cfg.red_p)
         other = recolor(m, rng(seed, RECOLOR, e))
         for o, pos in zip(traj.obs, traj.positions):
-            same += routine.act(o) == routine.act(observe(other, (int(pos[0]), int(pos[1]))))
+            o_other = observe(other, (int(pos[0]), int(pos[1])))
+            same += routine.act(o) == routine.act(o_other)
             total += 1
-    return same / total
+            if total <= cfg.n_shift_positions:
+                originals.append(o)
+                recolored.append(o_other)
+    shift = representation_shift(routine.encode(np.array(originals)), routine.encode(np.array(recolored)))
+    return same / total, shift
 
 
 def premise_checks(seed: int, cfg: Config, p1: Phase1) -> dict:
-    """P1: Farbinvarianz der Routine und Vorwärtsmodell besser als das reine Häufigkeitsmodell."""
-    invariance = color_invariance(seed, cfg, p1.routine)
+    """P1: Farbinvarianz der Routine und Vorwärtsmodell besser als das reine Häufigkeitsmodell. P1b: Restanteil auf
+    dem Übungspuffer und Verschiebung von z. Ein nicht endlicher Restanteil oder eine nicht endliche Verschiebung gilt
+    als nicht erfüllt (Restanteil ist nan, wenn keine Nachbarzelle bleibt)."""
+    invariance, shift = invariance_and_shift(seed, cfg, p1.routine)
     X, A, D = _stack(routine_rollouts(p1.routine, seed, PREMISE_FWD, cfg.n_premise_fwd_episodes, cfg,
                                       p_slip=cfg.p_slip))
     fwd = float(p1.forward.surprise(p1.routine.encode(X), A, D).mean())
     freq = float(freq_surprise(p1.class_counts, D))
-    return {"ok": bool(invariance >= cfg.min_invariance and fwd < freq), "color_invariance": float(invariance),
-            "fwd_surprise": fwd, "freq_surprise": freq}
+    restanteil = float(color_restanteil(p1.routine.encode(p1.practice_obs), p1.practice_obs, p1.practice_episodes,
+                                        rng(seed, PROBE), l2=cfg.fwd_l2, n_folds=cfg.n_folds))
+    closed = (math.isfinite(restanteil) and restanteil <= cfg.max_restanteil
+              and math.isfinite(shift) and shift <= cfg.max_shift)
+    return {"ok": bool(invariance >= cfg.min_invariance and fwd < freq and closed),
+            "color_invariance": float(invariance), "fwd_surprise": fwd, "freq_surprise": freq,
+            "restanteil": restanteil, "shift": float(shift)}
 
 
 def bisect_to_target(f: Callable[[float], float], target: float, lo: float, hi: float, rel_tol: float,
@@ -204,7 +290,8 @@ def deploy(seed: int, cfg: Config, p1: Phase1, p_global: float, condition: str) 
                       cusum_h=p1.cusum_h, seed=seed, systems=cfg.systems, buffer_size=cfg.buffer_size,
                       window=cfg.notice_window, interval=cfg.check_interval, n_folds=cfg.n_folds,
                       max_open=cfg.max_open, n_perm=cfg.n_perm, alpha=cfg.alpha, l2=cfg.fwd_l2, tol=cfg.logreg_tol,
-                      max_iter=cfg.logreg_max_iter)
+                      max_iter=cfg.logreg_max_iter, practice=p1.practice, deltas=p1.deltas, n_perm_A=cfg.n_perm_A,
+                      perm_chunk=cfg.perm_chunk)
     for traj in stream_episodes(seed, cfg, p1, p_global, condition):
         for o, a, d in zip(traj.obs, traj.actions, traj.disps):
             monitor.add_step(o, int(a), int(d))
@@ -228,15 +315,25 @@ def _log(msg: str) -> None:
     print(f"{time.strftime('%H:%M:%S')} {msg}", file=sys.stderr, flush=True)
 
 
+def _finite_or_none(x: float) -> float | None:
+    return x if math.isfinite(x) else None
+
+
 def run_seed(seed: int, cfg: Config) -> dict:
     t0 = time.perf_counter()
     _log(f"seed {seed} gestartet")
     p1 = phase1(seed, cfg)
     premise = premise_checks(seed, cfg, p1)
     _log(f"seed {seed} Phase 1 fertig ({p1.sec:.0f} s), Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'}")
-    result = {"seed": int(seed), "config": cfg.as_dict(), "env": env_block(), "premise": premise,
+    # JSON kennt kein NaN/Infinity: ein nicht endlicher Restanteil oder eine nicht endliche Verschiebung steht als null
+    json_premise = {**premise, "restanteil": _finite_or_none(premise["restanteil"]),
+                    "shift": _finite_or_none(premise["shift"])}
+    result = {"seed": int(seed), "config": cfg.as_dict(), "env": env_block(), "premise": json_premise,
               "calibration": {"m3_threshold": float(p1.m3_threshold), "cusum_k": float(p1.cusum_k),
                               "cusum_h": float(p1.cusum_h)},
+              "practice": {name: [{"cand": c, "name": candidate_name(name.split("-")[1], c)} for c in cands]
+                           for name, cands in p1.practice.items()},
+              "delta": dict(p1.deltas),
               "p_global": None, "conditions": None, "phase1_sec": float(p1.sec)}
     if premise["ok"]:
         result["p_global"] = find_p_global(seed, cfg, p1)

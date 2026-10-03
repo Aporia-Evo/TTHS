@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+import farbversuch.monitor as monitor
 import farbversuch.run as run
 from farbversuch.run import (CONDITIONS, THREAD_VARS, bisect_to_target, deploy, env_block, find_p_global, main,
                              parse_seeds, run_seed, stream_episodes)
@@ -139,6 +140,21 @@ def test_find_p_global_plain_and_reproducible(tiny_phase1):
 
 
 @pytest.mark.slow
+def test_deploy_hands_ontology_and_configured_permutations_to_the_monitor(monkeypatch, tiny_phase1):
+    seen = []
+    monkeypatch.setattr(monitor, "s1_explain", lambda S, F, opened, rng, n_perm, alpha, max_new, chunk:
+                        seen.append((F.shape[1], list(opened), n_perm, alpha, max_new, chunk)) or [])
+    cfg = dataclasses.replace(TINY, n_perm=123, n_perm_A=77, perm_chunk=50, alpha=.01, n_deploy_episodes=10)
+    practice = {**tiny_phase1.practice, "S1-B": [1, 4], "S1-A": [7, 300]}
+    p1 = dataclasses.replace(tiny_phase1, cusum_h=-1., practice=practice)    # S1 bemerkt sofort; Prüfpunkt bei E = 10
+    r = deploy(0, cfg, p1, .4, "none")
+    assert sorted(seen) == [(6, [1, 4], 123, .01, cfg.max_open, 50), (1192, [7, 300], 77, .01, cfg.max_open, 50)]
+    assert r["M3-B"]["delta"] == p1.deltas["M3-B"] and r["S1-B"]["delta"] is None
+    assert r["S1-A"]["practice"] == [{"cand": 7, "name": monitor.candidate_name("A", 7)},
+                                     {"cand": 300, "name": monitor.candidate_name("A", 300)}]
+
+
+@pytest.mark.slow
 def test_deploy_reproducible_and_complete(tiny_phase1):
     def strip(r):                                # Wandzeiten dürfen abweichen
         return {k: {kk: vv for kk, vv in v.items() if not kk.endswith("_sec")} for k, v in r.items()}
@@ -168,10 +184,36 @@ def test_run_seed_schema():
 
 
 @pytest.mark.slow
+def test_run_seed_v2_schema():
+    r = run_seed(0, TINY)
+    assert set(r["practice"]) == set(TINY.systems) and set(r["delta"]) == {"M3-B"}
+    assert {"practice", "delta"} <= set(r["conditions"]["red"]["M3-B"]) and json.loads(json.dumps(r)) == r
+    assert {"restanteil", "shift"} <= set(r["premise"])
+    for name, cands in r["practice"].items():
+        assert all(set(c) == {"cand", "name"} for c in cands)
+        assert r["conditions"]["red"][name]["practice"] == cands
+    assert all(type(d) is float and d >= 0 for d in r["delta"].values())
+    red = r["conditions"]["red"]
+    assert red["M3-B"]["delta"] == r["delta"]["M3-B"] and red["S1-B"]["delta"] is None
+
+
+@pytest.mark.slow
+def test_non_finite_p1b_values_become_null_in_the_result(monkeypatch, tiny_phase1):
+    # JSON hat kein NaN: nicht endliche Restanteil-/Verschiebungswerte stehen als null im Ergebnis
+    monkeypatch.setattr(run, "phase1", lambda seed, cfg: tiny_phase1)
+    monkeypatch.setattr(run, "premise_checks", lambda seed, cfg, p1: {
+        "ok": False, "color_invariance": 1., "fwd_surprise": 1., "freq_surprise": 2.,
+        "restanteil": float("nan"), "shift": float("inf")})
+    r = run_seed(0, TINY)
+    assert r["premise"]["restanteil"] is None and r["premise"]["shift"] is None and r["premise"]["ok"] is False
+    assert r["conditions"] is None and json.loads(json.dumps(r, allow_nan=False)) == r
+
+
+@pytest.mark.slow
 def test_run_seed_content():
     r = run_seed(0, TINY)
-    assert list(r) == ["seed", "config", "env", "premise", "calibration", "p_global", "conditions", "phase1_sec",
-                       "total_sec"]
+    assert list(r) == ["seed", "config", "env", "premise", "calibration", "practice", "delta", "p_global",
+                       "conditions", "phase1_sec", "total_sec"]
     assert r["seed"] == 0 and r["config"] == TINY.as_dict() and r["premise"]["ok"] is True
     assert set(r["calibration"]) == {"m3_threshold", "cusum_k", "cusum_h"}
     assert set(r["p_global"]) == {"p_global", "red_surprise", "hit", "bracketed", "evals"}
