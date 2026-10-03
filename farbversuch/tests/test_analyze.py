@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from farbversuch.analyze import evaluate, is_colour, is_correct, load_results, main, report_markdown, stream_metrics
+from farbversuch.analyze import (MAIN_SEEDS, evaluate, is_colour, is_correct, load_results, main, report_markdown,
+                                 stream_metrics)
 from farbversuch.monitor import SYSTEMS
 from farbversuch.run import CONDITIONS
 from farbversuch.world import CH_COLOR, CH_GOAL, CH_WALL, C_SPECIAL, DELTAS, obs_index
@@ -283,3 +284,82 @@ def test_cli_rejects_duplicate_seeds(tmp_path):
         main(["--results", str(tmp_path), "--seeds", "400,400"])
     with pytest.raises(ValueError, match="400"):                          # auch ohne parse_seeds: load_results + evaluate
         evaluate(load_results(tmp_path, [400, 400]), [400, 400])
+
+
+# --- Review des Nutzers: vorregistrierte Urteile nur für die Hauptseeds (U2) ---
+
+VERDICTS = (("P2", "fulfilled"), ("P3", "fulfilled"), ("P4", "fulfilled"), ("P5", "fulfilled"), ("abort", "triggered"))
+
+
+def verdicts(ev):
+    return {f"{k}.{f}": ev[k][f] for k, f in VERDICTS}
+
+
+def test_main_seeds_are_the_preregistered_ten():
+    assert MAIN_SEEDS == tuple(range(400, 410))
+
+
+@pytest.mark.parametrize("seeds", [list(MAIN_SEEDS), list(reversed(MAIN_SEEDS)), [405, 400, 409, 401, 408, 402, 407, 403, 406, 404]])
+def test_preregistered_for_exactly_the_main_seeds_in_any_order(seeds):
+    ev = evaluate([fake_result(s) for s in seeds], seeds)
+    assert ev["preregistered"] is True
+    assert all(isinstance(v, bool) for v in verdicts(ev).values())
+    assert ev["P2"] == {"count": 10, "fulfilled": True} and ev["abort"]["triggered"] is False
+
+
+@pytest.mark.parametrize("seeds", [[0], [400], list(range(400, 409)), list(range(401, 411)), list(range(400, 420)),
+                                   list(range(399, 410))])
+def test_other_seed_sets_are_explorative_with_counts_but_no_verdicts(seeds):
+    ev = evaluate([fake_result(s) for s in seeds], seeds)
+    assert ev["preregistered"] is False
+    assert verdicts(ev) == dict.fromkeys(verdicts(ev))                   # alles None
+    assert ev["P2"]["count"] == len(seeds) and ev["P3"]["count"] == len(seeds)
+    assert ev["abort"]["red_correct"] == len(seeds) and ev["abort"]["global_open"] == 0
+    assert ev["P1"]["ok_seeds"] == sorted(seeds) and ev["systems"]["M3-B"]["red"]["n_seeds"] == len(seeds)
+    assert ev["P5"]["M3-B"] == len(seeds) and ev["P4"]["latency_B"] == 20.0
+
+
+def test_nine_hits_among_twenty_seeds_is_not_a_p2_verdict():
+    seeds = list(range(400, 420))
+    ev = evaluate([fake_result(s, red_ok=s < 409) for s in seeds], seeds)
+    assert ev["P2"] == {"count": 9, "fulfilled": None} and ev["abort"]["triggered"] is None
+
+
+def test_single_pilot_seed_gets_no_abort_verdict():
+    ev = evaluate([fake_result(0)], [0])                              # früher: "Aufbau funktioniert nicht"
+    assert ev["abort"] == {"red_correct": 1, "global_open": 0, "triggered": None}
+
+
+def row(md, label):
+    return next(ln for ln in md.splitlines() if ln.startswith(f"| {label}"))
+
+
+def test_report_marks_explorative_evaluation_and_prints_no_verdicts():
+    seeds = [0, 1]
+    md = report_markdown(evaluate([fake_result(s, red_ok=s == 0) for s in seeds], seeds))
+    assert md.splitlines()[0] == "## Auswertung"
+    head = "\n".join(md.splitlines()[:5])                              # gut sichtbar, vor den Tabellen
+    assert ("Explorative Auswertung (Seeds 0, 1) – keine Prüfung der vorregistrierten Vorhersagen; "
+            "diese gilt nur für die Seeds 400–409.") in head
+    for label in ("P2", "P3", "P4", "P5"):
+        cells = [c.strip() for c in row(md, label).split("|")]
+        assert cells[2] == "–" and "erfüllt" not in cells[2]
+    assert "ausgelöst" not in md and "funktioniert nicht" not in md
+    assert "1/2 Seeds" in row(md, "P2") and "Abbruchkriterium" in md   # Zahlen bleiben
+
+
+def test_report_for_main_seeds_keeps_verdicts_and_abort_sentence():
+    seeds = list(MAIN_SEEDS)
+    md = report_markdown(evaluate([fake_result(s) for s in seeds], seeds))
+    assert "Explorative" not in md and "vorregistriert" not in md
+    assert "| erfüllt |" in row(md, "P2") and "Abbruchkriterium nicht ausgelöst." in md
+    md = report_markdown(evaluate([fake_result(s, red_ok=s < 404) for s in seeds], seeds))
+    assert "nicht erfüllt" in row(md, "P2") and "Abbruchkriterium ausgelöst:" in md
+
+
+def test_main_marks_a_partial_evaluation_as_explorative(tmp_path, capsys):
+    for s in (400, 401):
+        (tmp_path / f"seed_{s}.json").write_text(json.dumps(fake_result(s)))
+    main(["--results", str(tmp_path), "--seeds", "400-401"])
+    out = capsys.readouterr().out
+    assert "Explorative Auswertung (Seeds 400, 401)" in out and "ausgelöst" not in out

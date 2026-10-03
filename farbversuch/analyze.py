@@ -13,6 +13,7 @@ from farbversuch.world import CH_COLOR, C_SPECIAL, DELTAS, HALF, OBS_DIM, obs_in
 # Eingefrorene Schwellen der Spec §7 (Hauptlauf mit 10 Seeds)
 P2_MIN, P3_MIN = 9, 9
 ABORT_RED_MIN, ABORT_GLOBAL_MAX = 5, 3
+MAIN_SEEDS = tuple(range(400, 410))      # nur für diese Seeds gelten die vorregistrierten Schwellen und Urteile
 
 
 def is_correct(arm: str, cand: int) -> bool:
@@ -95,6 +96,7 @@ def _duplicates(xs: Sequence[int]) -> list[int]:
 
 
 def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
+    """Zählt und misst immer; Urteile (`fulfilled`, `triggered`) gibt es nur für die vorregistrierten MAIN_SEEDS, sonst None."""
     if dup := _duplicates(seeds):
         raise ValueError(f"doppelte Seeds in der Seed-Liste: {dup}")
     if dup := _duplicates([r["seed"] for r in results]):
@@ -123,18 +125,24 @@ def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
     # gescheiterte Prämisse zählt gegen M3-B: nicht richtig in red, geöffnet in global
     global_open = len(failed) + sum(m["n_opened"] > 0 for _, m in pairs["M3-B"]["global"])
     n_all = len(rs)
+    prereg = set(seeds) == set(MAIN_SEEDS)                 # Duplikate sind oben ausgeschlossen
+
+    def verdict(x: bool) -> bool | None:
+        return x if prereg else None
+
     latency_A, latency_B = (systems[n]["red"]["attr_latency_mean"] for n in ("M3-A", "M3-B"))
     misattr_A, misattr_B = (sum(systems[n][c]["misattr"] for c in CONDITIONS) for n in ("M3-A", "M3-B"))
     hits_B, hits_S1 = (systems[n]["red"]["n_correct"] for n in ("M3-B", "S1-B"))
     return {
+        "preregistered": prereg,
         "P1": {"ok_seeds": [r["seed"] for r in ok], "failed_seeds": failed},
-        "P2": {"count": red_correct, "fulfilled": red_correct >= P2_MIN},
-        "P3": {"count": n_all - global_open, "fulfilled": n_all - global_open >= P3_MIN},
+        "P2": {"count": red_correct, "fulfilled": verdict(red_correct >= P2_MIN)},
+        "P3": {"count": n_all - global_open, "fulfilled": verdict(n_all - global_open >= P3_MIN)},
         "P4": {"latency_A": latency_A, "latency_B": latency_B, "misattr_A": misattr_A, "misattr_B": misattr_B,
-               "fulfilled": bool(ok) and (latency_A > latency_B or misattr_A > misattr_B)},
-        "P5": {"M3-B": hits_B, "S1-B": hits_S1, "fulfilled": bool(ok) and hits_B >= hits_S1},
+               "fulfilled": verdict(bool(ok) and (latency_A > latency_B or misattr_A > misattr_B))},
+        "P5": {"M3-B": hits_B, "S1-B": hits_S1, "fulfilled": verdict(bool(ok) and hits_B >= hits_S1)},
         "abort": {"red_correct": red_correct, "global_open": global_open,
-                  "triggered": red_correct < ABORT_RED_MIN or global_open > ABORT_GLOBAL_MAX},
+                  "triggered": verdict(red_correct < ABORT_RED_MIN or global_open > ABORT_GLOBAL_MAX)},
         "systems": systems,
     }
 
@@ -145,7 +153,9 @@ def _f(x, nd: int = 1) -> str:
     return str(x) if isinstance(x, int) else f"{x:.{nd}f}"
 
 
-def _verdict(fulfilled: bool) -> str:
+def _verdict(fulfilled: bool | None) -> str:
+    if fulfilled is None:
+        return "–"
     return "erfüllt" if fulfilled else "nicht erfüllt"
 
 
@@ -161,7 +171,12 @@ def report_markdown(ev: dict) -> str:
     p4, p5, ab, systems = ev["P4"], ev["P5"], ev["abort"], ev["systems"]
     failed = ", ".join(str(s) for s in p1["failed_seeds"]) or "keine"
     gap_lat = None if p4["latency_A"] is None else p4["latency_A"] - p4["latency_B"]
-    out = ["## Auswertung", "", "### Vorhersagen", ""]
+    out = ["## Auswertung", ""]
+    if not ev["preregistered"]:
+        seeds = ", ".join(str(x) for x in sorted(p1["ok_seeds"] + p1["failed_seeds"]))
+        out += [f"> **Explorative Auswertung (Seeds {seeds}) – keine Prüfung der vorregistrierten Vorhersagen; "
+                f"diese gilt nur für die Seeds {MAIN_SEEDS[0]}–{MAIN_SEEDS[-1]}.**", ""]
+    out += ["### Vorhersagen", ""]
     out += _table(["Vorhersage", "Ergebnis", "Zahlen"], [
         ["P1 Prämissen", _verdict(not p1["failed_seeds"]), f"{n_ok}/{n} Seeds erfüllen die Prämissen; gescheitert: {failed}"],
         ["P2 M3-B schreibt `red` richtig zu", _verdict(ev["P2"]["fulfilled"]),
@@ -182,8 +197,9 @@ def report_markdown(ev: dict) -> str:
         ["Richtige Zuschreibung M3-B bei `red`", f"{ab['red_correct']}/{n} Seeds", f"< {ABORT_RED_MIN}"],
         ["M3-B öffnet bei `global` ein Merkmal", f"{ab['global_open']}/{n} Seeds", f"> {ABORT_GLOBAL_MAX}"],
     ])
-    out.append("Abbruchkriterium ausgelöst: das Wiederöffnen per Modellvergleich funktioniert in diesem Aufbau nicht."
-               if ab["triggered"] else "Abbruchkriterium nicht ausgelöst.")
+    if ab["triggered"] is not None:
+        out.append("Abbruchkriterium ausgelöst: das Wiederöffnen per Modellvergleich funktioniert in diesem Aufbau nicht."
+                   if ab["triggered"] else "Abbruchkriterium nicht ausgelöst.")
     out += ["", f"### Kennzahlen je System und Bedingung ({n_ok} Seeds mit erfüllter Prämisse)", ""]
     rows = []
     for name in SYSTEMS:
