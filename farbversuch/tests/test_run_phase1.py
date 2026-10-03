@@ -13,7 +13,7 @@ def test_config_defaults_match_spec():
     c = Config()
     assert (c.wall_p, c.wall_p_dense, c.p_slip, c.red_p, c.min_dist, c.max_steps) == (0.15, 0.30, 0.10, 0.5, 5, 40)
     assert (c.n_teacher_episodes, c.k, c.lr, c.epochs, c.wd, c.init_std) == (4000, 32, 0.5, 1000, 1e-3, 0.01)
-    assert (c.n_forward_episodes, c.n_null_streams, c.n_null_episodes, c.max_null_alarms) == (1000, 20, 300, 1)
+    assert (c.n_forward_episodes, c.n_null_streams, c.n_null_episodes, c.max_null_alarms) == (1000, 20, 400, 0)
     assert (c.n_invariance_maps, c.min_invariance, c.n_pglobal_episodes, c.pglobal_tol) == (500, 0.95, 300, 0.02)
     assert (c.n_deploy_episodes, c.switch_episode, c.buffer_size, c.notice_window, c.check_interval) == (400, 100, 2000, 500, 10)
     assert (c.n_folds, c.max_open, c.n_perm, c.alpha, c.cusum_sd_factor) == (5, 3, 1000, 0.05, 0.5)

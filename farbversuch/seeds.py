@@ -2,6 +2,7 @@
 import numpy as np
 
 TEACHER, INIT, FORWARD, NULL, INVARIANCE, RECOLOR, PREMISE_FWD, PGLOBAL, DEPLOY, CV, PERM = range(1, 12)
+PREOPEN, DELTA, PROBE = 12, 13, 14
 
 
 def rng(*keys: int) -> np.random.Generator:
