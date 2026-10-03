@@ -2,6 +2,7 @@
 Der Auswerter darf C_SPECIAL kennen; er gehört nicht zu den Systemen."""
 import argparse
 import json
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -89,7 +90,15 @@ def _require_identical(rs: Sequence[dict], key: str, label: str) -> None:
         raise ValueError(f"{label} weicht von Seed {rs[0]['seed']} ab bei Seeds {differing}")
 
 
+def _duplicates(xs: Sequence[int]) -> list[int]:
+    return sorted(x for x, n in Counter(xs).items() if n > 1)
+
+
 def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
+    if dup := _duplicates(seeds):
+        raise ValueError(f"doppelte Seeds in der Seed-Liste: {dup}")
+    if dup := _duplicates([r["seed"] for r in results]):
+        raise ValueError(f"mehr als ein Ergebnis für Seeds {dup}")
     by_seed = {r["seed"]: r for r in results}
     missing = [s for s in seeds if s not in by_seed]
     if missing:

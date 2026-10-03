@@ -255,3 +255,31 @@ def test_evaluate_requires_identical_config_and_env():
 def test_evaluate_compares_only_the_listed_seeds():
     results = [fake_result(s) for s in (400, 401)] + [{**fake_result(999), "env": {"other": 1}}]
     assert evaluate(results, [400, 401])["P2"]["count"] == 2
+
+
+# --- Review des Nutzers: doppelte Seeds (U1) ---
+
+def test_evaluate_rejects_duplicate_requested_seeds():
+    # ein erfolgreiches Ergebnis, zehnmal angefordert, darf nicht als "10/10 Treffer" zählen
+    with pytest.raises(ValueError, match="400"):
+        evaluate([fake_result(400)], [400] * 10)
+    with pytest.raises(ValueError, match="Seeds.*401") as exc:
+        evaluate([fake_result(s) for s in (400, 401, 402)], [400, 401, 401, 402])
+    assert "400" not in str(exc.value) and "402" not in str(exc.value)     # nur die doppelten werden genannt
+
+
+def test_evaluate_rejects_several_results_for_one_seed():
+    results = [fake_result(400), fake_result(401), fake_result(401, red_ok=False)]
+    with pytest.raises(ValueError, match="Ergebnis.*401") as exc:
+        evaluate(results, [400, 401])
+    assert "400" not in str(exc.value)
+    with pytest.raises(ValueError, match="999"):                          # auch für nicht angeforderte Seeds
+        evaluate([fake_result(400), fake_result(999), fake_result(999)], [400])
+
+
+def test_cli_rejects_duplicate_seeds(tmp_path):
+    (tmp_path / "seed_400.json").write_text(json.dumps(fake_result(400)))
+    with pytest.raises(ValueError, match="400"):
+        main(["--results", str(tmp_path), "--seeds", "400,400"])
+    with pytest.raises(ValueError, match="400"):                          # auch ohne parse_seeds: load_results + evaluate
+        evaluate(load_results(tmp_path, [400, 400]), [400, 400])
