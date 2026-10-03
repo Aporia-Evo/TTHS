@@ -118,6 +118,32 @@ def test_cli_writes_and_skips(tmp_path):
     main(args); assert f.stat().st_mtime_ns == t
 
 
+def _seed_file(out, seed, config):
+    out.mkdir(exist_ok=True)
+    f = out / f"seed_{seed}.json"
+    f.write_text(json.dumps({"seed": seed, "config": config}))
+    return f, (f.read_bytes(), f.stat().st_mtime_ns)
+
+
+@pytest.mark.parametrize("config", [{**TINY.as_dict(), "k": 99}, None])      # andere Konfiguration / keine
+def test_resume_refuses_foreign_config_and_leaves_the_file_alone(tmp_path, config):
+    f, before = _seed_file(tmp_path / "o", 0, config)
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    with pytest.raises(SystemExit, match="seed_0.json"):
+        main(["--config", str(cfg), "--seeds", "0-1", "--out", str(tmp_path / "o")])
+    assert (f.read_bytes(), f.stat().st_mtime_ns) == before
+    assert sorted(x.name for x in (tmp_path / "o").iterdir()) == ["seed_0.json"]     # Seed 1 wurde nicht gestartet
+
+
+def test_resume_skips_matching_seed_with_a_message(tmp_path, capsys):
+    f, before = _seed_file(tmp_path / "o", 0, TINY.as_dict())
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o")])
+    cap = capsys.readouterr()
+    assert "seed 0 übersprungen (vorhanden)" in cap.err and "seed 0" not in cap.out
+    assert (f.read_bytes(), f.stat().st_mtime_ns) == before
+
+
 @pytest.mark.slow
 def test_cli_pins_blas_threads_even_with_one_job(tmp_path, monkeypatch):
     for k in THREAD_VARS:

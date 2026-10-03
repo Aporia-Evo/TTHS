@@ -5,6 +5,7 @@ import json
 import multiprocessing
 import os
 import platform
+import sys
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -251,7 +252,8 @@ def _run_and_write(task: tuple[int, Config, str]) -> int:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m farbversuch.run", description="Farbversuch: Seeds ausführen")
     ap.add_argument("--seeds", required=True, help='z. B. "400-409", "0" oder "1,5"')
-    ap.add_argument("--out", required=True, help="Ausgabeordner für seed_<n>.json (Vorhandenes wird übersprungen)")
+    ap.add_argument("--out", required=True,
+                    help="Ausgabeordner für seed_<n>.json (Vorhandenes mit gleicher Konfiguration wird übersprungen)")
     ap.add_argument("--config", default=None, help="Konfigurations-JSON (Standard: Config())")
     ap.add_argument("--jobs", type=int, default=1)
     args = ap.parse_args(argv)
@@ -261,7 +263,20 @@ def main(argv: list[str] | None = None) -> None:
     cfg = Config.from_json(args.config) if args.config else Config()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    todo = [(s, cfg, str(out)) for s in parse_seeds(args.seeds) if not (out / f"seed_{s}.json").exists()]
+    todo, skipped, foreign = [], [], []
+    for s in parse_seeds(args.seeds):
+        path = out / f"seed_{s}.json"
+        if not path.exists():
+            todo.append((s, cfg, str(out)))
+        elif json.loads(path.read_text()).get("config") == cfg.as_dict():
+            skipped.append(s)
+        else:
+            foreign.append(str(path))
+    if foreign:                                  # nichts überschreiben, nichts starten
+        raise SystemExit("Abbruch: vorhandene Ergebnisse stammen aus einer anderen Konfiguration und werden nicht "
+                         "überschrieben: " + ", ".join(foreign))
+    for s in skipped:
+        print(f"seed {s} übersprungen (vorhanden)", file=sys.stderr, flush=True)
     if todo:                                     # auch --jobs 1 läuft in einem frisch gestarteten Worker
         with multiprocessing.get_context("spawn").Pool(max(1, args.jobs)) as pool:
             for seed in pool.imap_unordered(_run_and_write, todo):
