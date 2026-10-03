@@ -2,12 +2,11 @@
 Der Auswerter darf C_SPECIAL kennen; er gehört nicht zu den Systemen."""
 import argparse
 import json
-from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
 from farbversuch.monitor import SYSTEMS
-from farbversuch.run import CONDITIONS, parse_seeds
+from farbversuch.run import CONDITIONS, duplicates, parse_seeds
 from farbversuch.world import CH_COLOR, C_SPECIAL, DELTAS, HALF, OBS_DIM, obs_index
 
 # Eingefrorene Schwellen der Spec §7 (Hauptlauf mit 10 Seeds)
@@ -91,15 +90,11 @@ def _require_identical(rs: Sequence[dict], key: str, label: str) -> None:
         raise ValueError(f"{label} weicht von Seed {rs[0]['seed']} ab bei Seeds {differing}")
 
 
-def _duplicates(xs: Sequence[int]) -> list[int]:
-    return sorted(x for x, n in Counter(xs).items() if n > 1)
-
-
 def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
     """Zählt und misst immer; Urteile (`fulfilled`, `triggered`) gibt es nur für die vorregistrierten MAIN_SEEDS, sonst None."""
-    if dup := _duplicates(seeds):
+    if dup := duplicates(seeds):
         raise ValueError(f"doppelte Seeds in der Seed-Liste: {dup}")
-    if dup := _duplicates([r["seed"] for r in results]):
+    if dup := duplicates([r["seed"] for r in results]):
         raise ValueError(f"mehr als ein Ergebnis für Seeds {dup}")
     by_seed = {r["seed"]: r for r in results}
     missing = [s for s in seeds if s not in by_seed]

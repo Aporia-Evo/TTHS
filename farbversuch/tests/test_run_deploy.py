@@ -87,6 +87,38 @@ def test_parse_seeds_mixed_and_invalid():
         parse_seeds("5-3")
 
 
+@pytest.mark.parametrize("spec, dup", [("1,1", "[1]"), ("1-3,2", "[2]"), ("400-402,401,402", "[401, 402]"),
+                                       ("7,3,7,3", "[3, 7]")])
+def test_parse_seeds_rejects_duplicates_and_names_them(spec, dup):
+    with pytest.raises(ValueError, match="doppelte Seeds") as exc:
+        parse_seeds(spec)
+    assert dup in str(exc.value)
+
+
+def test_parse_seeds_unique_mixed_specs_still_work():
+    assert parse_seeds("3,1-2") == [3, 1, 2] and parse_seeds("1-2,4-5") == [1, 2, 4, 5]
+
+
+def test_cli_rejects_duplicate_seeds_before_running_anything(tmp_path, monkeypatch):
+    monkeypatch.setattr(run.multiprocessing, "get_context", lambda *a: pytest.fail("kein Worker darf starten"))
+    with pytest.raises(ValueError, match="doppelte Seeds.*1"):
+        main(["--seeds", "1,1", "--out", str(tmp_path / "o")])
+    assert not list((tmp_path / "o").glob("*"))
+
+
+def test_worker_temp_file_name_includes_the_process_id(tmp_path, monkeypatch):
+    seen = []
+    real_replace = os.replace
+    monkeypatch.setattr(run, "run_seed", lambda seed, cfg: {"seed": seed})
+    monkeypatch.setattr(os, "replace", lambda src, dst: (seen.append(os.path.basename(src)), real_replace(src, dst)))
+    for pid in (1111, 2222):                      # zwei Prozesse mit demselben Seed kollidieren nicht auf einer Datei
+        monkeypatch.setattr(os, "getpid", lambda pid=pid: pid)
+        assert run._run_and_write((5, TINY, str(tmp_path))) == 5
+    assert seen == ["seed_5.json.1111.tmp", "seed_5.json.2222.tmp"]
+    assert sorted(x.name for x in tmp_path.iterdir()) == ["seed_5.json"]          # nichts bleibt liegen
+    assert json.loads((tmp_path / "seed_5.json").read_text()) == {"seed": 5}
+
+
 @pytest.mark.slow
 def test_streams_share_maps_before_switch(tiny_phase1):
     s = {c: list(stream_episodes(0, TINY, tiny_phase1, .4, c)) for c in ("none", "red")}

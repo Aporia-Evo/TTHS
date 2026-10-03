@@ -7,7 +7,8 @@ import os
 import platform
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections import Counter
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -249,8 +250,12 @@ def run_seed(seed: int, cfg: Config) -> dict:
     return result
 
 
+def duplicates(xs: Sequence[int]) -> list[int]:
+    return sorted(x for x, n in Counter(xs).items() if n > 1)
+
+
 def parse_seeds(s: str) -> list[int]:
-    """"400-409" (einschließlich), "0" oder "1,5"; auch gemischt: "1-3,7"."""
+    """"400-409" (einschließlich), "0" oder "1,5"; auch gemischt: "1-3,7". Doppelte Seeds sind ein Fehler."""
     seeds: list[int] = []
     for part in s.split(","):
         lo, sep, hi = part.strip().partition("-")
@@ -260,6 +265,8 @@ def parse_seeds(s: str) -> list[int]:
             seeds.extend(range(int(lo), int(hi) + 1))
         else:
             raise ValueError(f"absteigender Bereich: {part!r}")
+    if dup := duplicates(seeds):
+        raise ValueError(f"doppelte Seeds: {dup}")
     return seeds
 
 
@@ -267,7 +274,7 @@ def _run_and_write(task: tuple[int, Config, str]) -> int:
     """Worker (top-level, damit spawn ihn importiert). Atomar geschrieben: ein Abbruch hinterlässt keine Teildatei."""
     seed, cfg, out = task
     path = Path(out) / f"seed_{seed}.json"
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(run_seed(seed, cfg), indent=2) + "\n")
     os.replace(tmp, path)
     return seed
