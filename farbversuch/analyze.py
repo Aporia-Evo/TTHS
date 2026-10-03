@@ -1,5 +1,5 @@
-"""Auswertung: Kennzahlen je Strom, Vorhersagen P1-P5, Abbruchkriterium und Markdown-Zahlen für BERICHT.md.
-Der Auswerter darf C_SPECIAL kennen; er gehört nicht zu den Systemen."""
+"""Auswertung: Kennzahlen je Strom, Vorhersagen P1-P5, Abbruchkriterium, Bestätigung (Spec v2 §8) und Markdown-Zahlen
+für BERICHT.md. Der Auswerter darf C_SPECIAL kennen; er gehört nicht zu den Systemen."""
 import argparse
 import json
 from collections.abc import Sequence
@@ -38,17 +38,20 @@ def stream_metrics(res: dict, condition: str, arm: str, switch: int, horizon: in
     else:
         false_alarm, notice_latency = False, noticed - switch
     opened = res["opened"]
+    usability = None
     if condition == "red":
         # richtig nur nach dem Wechsel (E > switch): davor sind alle Ströme gleich, eine Öffnung ist keine Erkennung
-        hits = [o["episode"] for o in opened if o["episode"] > switch and is_correct(arm, o["cand"])]
-        correct = bool(hits)
-        attr_latency = min(hits) - switch if hits else horizon
+        hits = [o for o in opened if o["episode"] > switch and is_correct(arm, o["cand"])]
+        first = min(hits, key=lambda o: o["episode"], default=None)
+        correct = first is not None
+        attr_latency = first["episode"] - switch if correct else horizon
+        usability = first.get("gain") if correct else None      # Nutzbarkeit (Spec §6); alte Ergebnisse haben kein "gain"
         misattr = len(opened) - len(hits)
     else:
         correct, attr_latency = None, None
         misattr = sum(is_colour(arm, o["cand"]) for o in opened)
     return {"false_alarm": false_alarm, "notice_latency": notice_latency, "correct": correct,
-            "attr_latency": attr_latency, "misattr": misattr, "n_opened": len(opened)}
+            "attr_latency": attr_latency, "misattr": misattr, "n_opened": len(opened), "usability": usability}
 
 
 def _mean(xs: Sequence[float]) -> float | None:
@@ -90,8 +93,9 @@ def _require_identical(rs: Sequence[dict], key: str, label: str) -> None:
         raise ValueError(f"{label} weicht von Seed {rs[0]['seed']} ab bei Seeds {differing}")
 
 
-def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
-    """Zählt und misst immer; Urteile (`fulfilled`, `triggered`) gibt es nur für die vorregistrierten MAIN_SEEDS, sonst None."""
+def _select(results: Sequence[dict], seeds: Sequence[int]) -> list[dict]:
+    """Die Ergebnisse der angeforderten Seeds in deren Reihenfolge. Doppelte, fehlende oder nicht vergleichbare
+    Ergebnisse sind ein Fehler."""
     if dup := duplicates(seeds):
         raise ValueError(f"doppelte Seeds in der Seed-Liste: {dup}")
     if dup := duplicates([r["seed"] for r in results]):
@@ -103,6 +107,34 @@ def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
     rs = [by_seed[s] for s in seeds]
     _require_identical(rs, "config", "Konfiguration")
     _require_identical(rs, "env", "Umgebung (env)")
+    return rs
+
+
+def _m3b_red(r: dict) -> dict | None:
+    """Kennzahlen von M3-B unter `red`; None bei gescheiterter Prämisse (dann gibt es keine Bedingungen)."""
+    if not r.get("conditions"):
+        return None
+    cfg = r["config"]
+    switch = cfg["switch_episode"]
+    return stream_metrics(r["conditions"]["red"]["M3-B"], "red", "B", switch, cfg["n_deploy_episodes"] - switch)
+
+
+def _seed_row(r: dict) -> dict:
+    """Werte je Seed für den Bericht (Spec §6). Was ein altes Ergebnis nicht enthält, ist None."""
+    premise = r["premise"]
+    practice = r.get("practice")
+    m = _m3b_red(r)
+    return {"seed": r["seed"], "premise_ok": bool(premise["ok"]),
+            "color_invariance": premise.get("color_invariance"), "restanteil": premise.get("restanteil"),
+            "shift": premise.get("shift"),
+            "practice": None if practice is None else {n: [e["name"] for e in es] for n, es in practice.items()},
+            "delta": r.get("delta"), "usability": None if m is None else m["usability"]}
+
+
+def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
+    """Zählt und misst immer; Urteile (`fulfilled`, `triggered`) gibt es nur für die vorregistrierten MAIN_SEEDS, sonst None."""
+    rs = _select(results, seeds)
+    cfg0 = (rs[0].get("config") or {}) if rs else {}               # die Konfigurationen sind identisch (_select)
     ok = [r for r in rs if r["premise"]["ok"]]
     failed = [r["seed"] for r in rs if not r["premise"]["ok"]]
 
@@ -139,7 +171,40 @@ def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
         "abort": {"red_correct": red_correct, "global_open": global_open,
                   "triggered": verdict(red_correct < ABORT_RED_MIN or global_open > ABORT_GLOBAL_MAX)},
         "systems": systems,
+        "seeds": [_seed_row(r) for r in rs],
+        "n_null_streams": cfg0.get("n_null_streams"), "max_null_alarms": cfg0.get("max_null_alarms", 0),
     }
+
+
+def _check_confirmation_seeds(seeds: Sequence[int]) -> None:
+    if not seeds:
+        raise ValueError("keine Seeds für die Bestätigung")
+    if used := sorted(set(seeds) & set(MAIN_SEEDS)):
+        raise ValueError(f"Die Bestätigung darf nicht auf Hauptlauf-Seeds ({MAIN_SEEDS[0]}–{MAIN_SEEDS[-1]}) laufen; "
+                         f"verwendet: {used}")
+
+
+def evaluate_confirmation(results: Sequence[dict], seeds: Sequence[int]) -> dict:
+    """Bestätigung (Spec v2 §8, Festlegung 8): jedes der drei Kriterien einzeln in mindestens ⌈0,8·n⌉ Seeds.
+    Ein Seed mit gescheiterter Prämisse erfüllt auch Kriterium 2 und 3 nicht. Seeds des Hauptlaufs sind ein Fehler."""
+    _check_confirmation_seeds(seeds)
+    rs = _select(results, seeds)
+    n = len(rs)
+    need = -(-4 * n // 5)                                      # ⌈0,8·n⌉ ohne Gleitkomma
+    per_seed = {}
+    for r in rs:
+        ok = bool(r["premise"]["ok"])
+        # geöffnet = nur Wiederöffnungen; die Übungs-Ontologie steht nicht in "opened"
+        quiet = ok and all(not r["conditions"][c]["M3-B"]["opened"] for c in ("none", "global"))
+        per_seed[r["seed"]] = {"premise": ok, "no_false_open": quiet, "red_correct": ok and bool(_m3b_red(r)["correct"])}
+
+    def criterion(key: str) -> dict:
+        count = sum(row[key] for row in per_seed.values())
+        return {"count": count, "fulfilled": count >= need}
+
+    crit = {key: criterion(key) for key in ("premise", "no_false_open", "red_correct")}
+    return {"n": n, "need": need, **crit, "confirmed": all(c["fulfilled"] for c in crit.values()),
+            "per_seed": per_seed}
 
 
 def _f(x, nd: int = 1) -> str:
@@ -154,10 +219,28 @@ def _verdict(fulfilled: bool | None) -> str:
     return "erfüllt" if fulfilled else "nicht erfüllt"
 
 
+def _percent_de(x: float) -> str:
+    return f"{100 * x:.1f}".replace(".", ",") + " %"
+
+
 def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> list[str]:
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     lines += ["| " + " | ".join(row) + " |" for row in rows]
     return lines + [""]
+
+
+def _seed_values_table(ev: dict) -> list[str]:
+    m3 = [n for n in SYSTEMS if n.startswith("M3")]
+    header = (["Seed", "Prämisse", "Farbinvarianz", "Restanteil", "Verschiebung"]
+              + [f"Übungs-Ontologie {n}" for n in SYSTEMS] + [f"δ {n}" for n in m3] + ["Nutzbarkeit"])
+    rows = []
+    for row in ev["seeds"]:
+        practice, delta = row["practice"] or {}, row["delta"] or {}
+        rows.append([str(row["seed"]), _verdict(row["premise_ok"]), _f(row["color_invariance"], 3),
+                     _f(row["restanteil"], 3), _f(row["shift"], 3)]
+                    + ["–" if n not in practice else ", ".join(practice[n]) or "keine" for n in SYSTEMS]
+                    + [_f(delta.get(n), 4) for n in m3] + [_f(row["usability"], 4)])
+    return _table(header, rows)
 
 
 def report_markdown(ev: dict) -> str:
@@ -195,7 +278,13 @@ def report_markdown(ev: dict) -> str:
     if ab["triggered"] is not None:
         out.append("Abbruchkriterium ausgelöst: das Wiederöffnen per Modellvergleich funktioniert in diesem Aufbau nicht."
                    if ab["triggered"] else "Abbruchkriterium nicht ausgelöst.")
-    out += ["", f"### Kennzahlen je System und Bedingung ({n_ok} Seeds mit erfüllter Prämisse)", ""]
+    out += ["", "### Werte je Seed", ""]
+    out += _seed_values_table(ev)
+    out += ["Prämisse umfasst P1 und P1b. Restanteil und Verschiebung gehören zu P1b. Übungs-Ontologie: vor dem Einsatz "
+            "geöffnete Merkmale des jeweiligen Systems; sie zählen nie als geöffnet. δ: Mindestverbesserung aus den "
+            "Null-Strömen. Nutzbarkeit: mittlere Verbesserung (nats pro Schritt) des Merkmals „Farbe 0“ bei der ersten "
+            "richtigen Öffnung durch M3-B unter `red`. „–“: im Ergebnis nicht enthalten oder keine richtige Öffnung.", ""]
+    out += [f"### Kennzahlen je System und Bedingung ({n_ok} Seeds mit erfüllter Prämisse)", ""]
     rows = []
     for name in SYSTEMS:
         for cond in CONDITIONS:
@@ -205,9 +294,13 @@ def report_markdown(ev: dict) -> str:
                          str(m["misattr"]), str(m["n_opened"])])
     out += _table(["System", "Bedingung", "Seeds", "Fehlalarme", "Bemerkt", "Latenz Bemerken (Mittel)",
                    "Richtig zugeschrieben", "Latenz Zuschreibung (Mittel)", "Fehlzuschreibungen", "Geöffnet"], rows)
+    n_null, k = ev["n_null_streams"], ev["max_null_alarms"]       # k = 0 in v2: 1/(n + 1)
+    rate = ("–" if n_null is None else
+            f"≈ {k + 1}/{n_null + 1} = {_percent_de((k + 1) / (n_null + 1))} "
+            f"({n_null} Null-Ströme, höchstens {k} Alarme bei der Kalibrierung)")
     out += ["Latenzen in Episoden ab dem Wechsel; nicht bemerkt oder nicht zugeschrieben zählt als Horizont. "
             "Die Latenz des Bemerkens mittelt über Seeds ohne Fehlalarm und gilt nicht für `none`.", "",
-            "### Kosten", ""]
+            f"Erwartete Fehlalarmrate pro Strom: {rate}.", "", "### Kosten", ""]
     rows = []
     for name in SYSTEMS:
         for cond in CONDITIONS:
@@ -216,6 +309,28 @@ def report_markdown(ev: dict) -> str:
                          _f(m["check_sec_mean"], 3), _f(m["check_sec_max"], 3), _f(m["total_sec"], 2)])
     out += _table(["System", "Bedingung", "Puffer (Byte)", "Anpassungen", "Größe der Anpassungen",
                    "Prüfung Mittel (s)", "Prüfung Max (s)", "Gesamt (s)"], rows)
+    return "\n".join(out)
+
+
+def confirmation_markdown(ev: dict) -> str:
+    """Abschnitt „Bestätigung“ aus dem Ergebnis von evaluate_confirmation."""
+    n, need = ev["n"], ev["need"]
+    seeds = ", ".join(str(s) for s in ev["per_seed"])
+    out = ["## Bestätigung (Spec v2 §8)", "",
+           f"Seeds {seeds} (n = {n}), explorativ ausgewertet. Die Methode gilt als bestätigt, wenn jedes der drei "
+           f"Kriterien in mindestens {need} von {n} Seeds gilt; ein Seed mit gescheiterter Prämisse zählt bei den "
+           f"Kriterien 2 und 3 als nicht erfüllt.", ""]
+    labels = [("premise", "1 Prämissen P1 und P1b erfüllt"),
+              ("no_false_open", "2 M3-B öffnet bei `none` und `global` nichts über die Übungs-Ontologie hinaus"),
+              ("red_correct", "3 M3-B öffnet bei `red` „Farbe 0“ nach dem Wechsel")]
+    out += _table(["Kriterium", "Seeds", "Benötigt", "Ergebnis"],
+                  [[label, f"{ev[key]['count']}/{n}", f"≥ {need}", _verdict(ev[key]["fulfilled"])]
+                   for key, label in labels])
+    out += _table(["Seed", "Kriterium 1", "Kriterium 2", "Kriterium 3"],
+                  [[str(seed)] + ["ja" if row[key] else "nein" for key, _ in labels]
+                   for seed, row in ev["per_seed"].items()])
+    out.append("Bestätigt." if ev["confirmed"] else
+               "Nicht bestätigt: Ergebnis zurück an den Nutzer; eine weitere Runde läuft nur auf neuen Seeds.")
     return "\n".join(out)
 
 
@@ -233,9 +348,17 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m farbversuch.analyze", description="Farbversuch: Ergebnisse auswerten")
     ap.add_argument("--results", required=True, help="Ordner mit seed_<n>.json")
     ap.add_argument("--seeds", required=True, help='z. B. "400-409"')
+    ap.add_argument("--confirm", action="store_true",
+                    help="Bestätigungsabschnitt (Spec v2 §8) anhängen; nicht mit den Hauptlauf-Seeds 400-409")
     args = ap.parse_args(argv)
     seeds = parse_seeds(args.seeds)
-    print(report_markdown(evaluate(load_results(args.results, seeds), seeds)))
+    if args.confirm:
+        _check_confirmation_seeds(seeds)                       # vor dem Laden: der Seed-Fehler soll nicht untergehen
+    results = load_results(args.results, seeds)
+    out = report_markdown(evaluate(results, seeds))
+    if args.confirm:
+        out += "\n" + confirmation_markdown(evaluate_confirmation(results, seeds))
+    print(out)
 
 
 if __name__ == "__main__":

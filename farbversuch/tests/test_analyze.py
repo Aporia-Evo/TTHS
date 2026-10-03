@@ -2,24 +2,34 @@ import json
 
 import pytest
 
-from farbversuch.analyze import (MAIN_SEEDS, evaluate, is_colour, is_correct, load_results, main, report_markdown,
-                                 stream_metrics)
+from farbversuch.analyze import (MAIN_SEEDS, confirmation_markdown, evaluate, evaluate_confirmation, is_colour,
+                                 is_correct, load_results, main, report_markdown, stream_metrics)
 from farbversuch.monitor import SYSTEMS
 from farbversuch.run import CONDITIONS
 from farbversuch.world import CH_COLOR, CH_GOAL, CH_WALL, C_SPECIAL, DELTAS, obs_index
 
 
-def sysres(noticed=None, opened=()):
-    return {"noticed": noticed, "opened": [{"cand": c, "name": "", "episode": e} for c, e in opened],
+def sysres(noticed=None, opened=(), gain=None):
+    """opened: (cand, episode) oder (cand, episode, gain); `gain` ist der Standard für Öffnungen ohne eigenen."""
+    return {"noticed": noticed,
+            "practice": [], "delta": None,
+            "opened": [{"cand": c, "name": "", "episode": e, "gain": (g[0] if g else gain)} for c, e, *g in opened],
             "buffer_bytes": 0, "n_fits": 0, "fit_size": 0, "check_sec": [], "total_sec": 0.}
 
 
-def fake_result(seed, red_ok=True, global_open=False, ok=True):
+PRACTICE = {"M3-B": [{"cand": 4, "name": "Wand"}], "M3-A": [], "S1-B": [{"cand": 5, "name": "Ziel"}],
+            "S1-A": [{"cand": 3, "name": "bit3&a0"}, {"cand": 300, "name": "bit2&a1"}]}
+
+
+def fake_result(seed, red_ok=True, global_open=False, ok=True, gain=0.05):
     conds = {c: {s: sysres() for s in SYSTEMS} for c in CONDITIONS}
-    conds["red"]["M3-B"] = sysres(110, [(C_SPECIAL, 120)] if red_ok else [])
+    conds["red"]["M3-B"] = sysres(110, [(C_SPECIAL, 120)] if red_ok else [], gain=gain)
     conds["global"]["M3-B"] = sysres(110, [(4, 120)] if global_open else [])
-    return {"seed": seed, "config": {"switch_episode": 100, "n_deploy_episodes": 400},
-            "premise": {"ok": ok}, "conditions": conds if ok else None}
+    return {"seed": seed, "config": {"switch_episode": 100, "n_deploy_episodes": 400, "n_null_streams": 20},
+            "premise": {"ok": ok, "color_invariance": 0.99, "fwd_surprise": 1.0, "freq_surprise": 1.5,
+                        "restanteil": 0.05, "shift": 0.1},
+            "practice": PRACTICE, "delta": {"M3-B": 0.002, "M3-A": 0.003},
+            "conditions": conds if ok else None}
 
 
 A_RED = 0 * 298 + obs_index(CH_COLOR[C_SPECIAL], -1, 0)       # Farbe 0 oben, Aktion oben
@@ -363,3 +373,284 @@ def test_main_marks_a_partial_evaluation_as_explorative(tmp_path, capsys):
     main(["--results", str(tmp_path), "--seeds", "400-401"])
     out = capsys.readouterr().out
     assert "Explorative Auswertung (Seeds 400, 401)" in out and "ausgelöst" not in out
+
+
+# --- Task 8: Auswertung v2 und Bestätigung ---
+
+def test_confirmation_counts_and_need():
+    seeds = list(range(500, 505))
+    rs = [fake_result(s, red_ok=s != 500, global_open=s == 501) for s in seeds]
+    ev = evaluate_confirmation(rs, seeds)
+    assert ev["need"] == 4 and ev["red_correct"] == {"count": 4, "fulfilled": True}
+    assert ev["no_false_open"]["count"] == 4 and ev["confirmed"]
+
+
+def test_confirmation_rejects_main_seeds_and_duplicates():
+    with pytest.raises(ValueError): evaluate_confirmation([fake_result(400)], [400])
+    with pytest.raises(ValueError): evaluate_confirmation([fake_result(500)], [500, 500])
+
+
+def test_failed_premise_counts_against_confirmation():
+    seeds = list(range(500, 505))
+    ev = evaluate_confirmation([fake_result(s, ok=s > 501) for s in seeds], seeds)
+    assert ev["premise"]["count"] == 3 and not ev["confirmed"]
+
+
+def test_report_shows_practice_and_p1b():
+    seeds = list(range(400, 410))
+    md = report_markdown(evaluate([fake_result(s) for s in seeds], seeds))
+    assert "Restanteil" in md and "Übungs-Ontologie" in md and "Nutzbarkeit" in md and "4,8" in md
+
+
+def test_confirmation_result_has_exactly_the_contract_keys_and_n():
+    seeds = list(range(500, 505))
+    ev = evaluate_confirmation([fake_result(s) for s in seeds], seeds)
+    assert {"n", "need", "premise", "no_false_open", "red_correct", "confirmed"} <= set(ev)
+    assert ev["n"] == 5 and ev["premise"] == {"count": 5, "fulfilled": True}
+    assert ev["no_false_open"] == {"count": 5, "fulfilled": True}
+
+
+@pytest.mark.parametrize("n, need", [(1, 1), (3, 3), (4, 4), (5, 4), (6, 5), (10, 8), (15, 12)])
+def test_confirmation_need_is_ceil_of_four_fifths(n, need):
+    seeds = list(range(500, 500 + n))
+    ev = evaluate_confirmation([fake_result(s) for s in seeds], seeds)
+    assert ev["n"] == n and ev["need"] == need
+
+
+def test_each_criterion_is_checked_separately():
+    # Seed 500 verfehlt nur Kriterium 2, Seed 501 nur Kriterium 3: jedes Kriterium hat 4/5, obwohl nur 3 Seeds alle erfüllen
+    seeds = list(range(500, 505))
+    rs = [fake_result(500, global_open=True), fake_result(501, red_ok=False)] + [fake_result(s) for s in (502, 503, 504)]
+    ev = evaluate_confirmation(rs, seeds)
+    assert (ev["premise"]["count"], ev["no_false_open"]["count"], ev["red_correct"]["count"]) == (5, 4, 4)
+    assert ev["confirmed"]
+    # fällt ein Kriterium unter 4, ist die Methode nicht bestätigt, egal wie gut die anderen sind
+    rs = [fake_result(500, global_open=True), fake_result(501, global_open=True)] + [fake_result(s) for s in (502, 503, 504)]
+    ev = evaluate_confirmation(rs, seeds)
+    assert (ev["premise"]["count"], ev["no_false_open"]["count"], ev["red_correct"]["count"]) == (5, 3, 5)
+    assert ev["premise"]["fulfilled"] and ev["red_correct"]["fulfilled"] and not ev["no_false_open"]["fulfilled"]
+    assert not ev["confirmed"]
+
+
+def test_failed_premise_seed_is_not_fulfilled_for_criteria_two_and_three():
+    seeds = list(range(500, 505))
+    ev = evaluate_confirmation([fake_result(s, ok=s != 500) for s in seeds], seeds)
+    assert ev["premise"]["count"] == 4 and ev["no_false_open"]["count"] == 4 and ev["red_correct"]["count"] == 4
+    assert ev["confirmed"]                                       # 4 von 5 genügt
+    ev = evaluate_confirmation([fake_result(s, ok=s > 501) for s in seeds], seeds)
+    assert ev["no_false_open"]["count"] == 3 and ev["red_correct"]["count"] == 3
+    # die Prämisse entscheidet, nicht das Vorhandensein von Bedingungen: ok=False mit sonst makellosen Strömen
+    rs = [fake_result(s) for s in seeds]
+    rs[0]["premise"]["ok"] = False
+    ev = evaluate_confirmation(rs, seeds)
+    assert (ev["premise"]["count"], ev["no_false_open"]["count"], ev["red_correct"]["count"]) == (4, 4, 4)
+
+
+def test_confirmation_false_open_in_none_counts_and_practice_is_not_an_opening():
+    seeds = list(range(500, 505))
+    rs = [fake_result(s) for s in seeds]
+    for r in rs[:2]:
+        sys_variant(r, "M3-B", "none", sysres(150, [(4, 160)]))      # offen in none
+    ev = evaluate_confirmation(rs, seeds)
+    assert ev["no_false_open"] == {"count": 3, "fulfilled": False} and not ev["confirmed"]
+    # Übungs-Ontologie steht in "practice", nicht in "opened": sie ist kein falsches Öffnen
+    assert all(r["conditions"]["none"]["M3-B"]["practice"] == [] for r in rs[2:])
+    rs = [{**fake_result(s), "practice": {**PRACTICE, "M3-B": [{"cand": 0, "name": "Farbe 0"}]}} for s in seeds]
+    assert evaluate_confirmation(rs, seeds)["no_false_open"]["count"] == 5
+
+
+def test_confirmation_red_correct_needs_an_opening_after_the_switch():
+    seeds = list(range(500, 505))
+    rs = [fake_result(s) for s in seeds]
+    sys_variant(rs[0], "M3-B", "red", sysres(60, [(C_SPECIAL, 70)]))     # richtige Farbe, aber vor dem Wechsel
+    sys_variant(rs[1], "M3-B", "red", sysres(110, [(4, 120)]))           # falsches Merkmal
+    ev = evaluate_confirmation(rs, seeds)
+    assert ev["red_correct"] == {"count": 3, "fulfilled": False}
+
+
+def test_confirmation_ignores_other_conditions_for_false_opens():
+    # walls ist kein Teil von Kriterium 2; red-Öffnungen anderer Merkmale schaden Kriterium 3 nicht, solange Farbe 0 kommt
+    seeds = list(range(500, 505))
+    rs = [fake_result(s) for s in seeds]
+    for r in rs:
+        sys_variant(r, "M3-B", "walls", sysres(120, [(4, 130)]))
+        sys_variant(r, "M3-B", "red", sysres(110, [(4, 115), (C_SPECIAL, 120)]))
+    ev = evaluate_confirmation(rs, seeds)
+    assert ev["no_false_open"]["count"] == 5 and ev["red_correct"]["count"] == 5 and ev["confirmed"]
+
+
+def test_confirmation_error_cases():
+    with pytest.raises(ValueError, match="400.*409|Hauptlauf") as exc:
+        evaluate_confirmation([fake_result(s) for s in (405, 500)], [405, 500])
+    assert "405" in str(exc.value) and "500" not in str(exc.value)
+    with pytest.raises(ValueError, match="409"):                       # schon die Grenze zählt
+        evaluate_confirmation([fake_result(409)], [409])
+    evaluate_confirmation([fake_result(s) for s in (399, 410)], [399, 410])      # direkt daneben ist erlaubt
+    with pytest.raises(ValueError, match="doppelt.*500"):
+        evaluate_confirmation([fake_result(500)], [500, 500])
+    with pytest.raises(ValueError, match="501"):                       # fehlendes Ergebnis
+        evaluate_confirmation([fake_result(500)], [500, 501])
+    with pytest.raises(ValueError, match="Ergebnis.*500"):             # zwei Ergebnisse für einen Seed
+        evaluate_confirmation([fake_result(500), fake_result(500)], [500])
+    with pytest.raises(ValueError, match="Konfiguration.*501"):
+        evaluate_confirmation([fake_result(500), {**fake_result(501), "config": {"switch_episode": 50,
+                                                                                  "n_deploy_episodes": 400}}], [500, 501])
+    with pytest.raises(ValueError):                                    # ohne Seeds gäbe es "bestätigt" aus nichts
+        evaluate_confirmation([], [])
+
+
+def test_confirmation_markdown_shows_three_criteria_counts_and_verdicts():
+    seeds = list(range(500, 505))
+    md = confirmation_markdown(evaluate_confirmation(
+        [fake_result(s, red_ok=s != 500, global_open=s == 501) for s in seeds], seeds))
+    assert md.splitlines()[0] == "## Bestätigung (Spec v2 §8)"
+    crit = [[c.strip() for c in ln.strip("|").split("|")] for ln in md.splitlines() if ln[:3] in ("| 1", "| 2", "| 3")]
+    assert [c[0][0] for c in crit] == ["1", "2", "3"]
+    assert "Prämissen" in crit[0][0] and "`none`" in crit[1][0] and "`global`" in crit[1][0] and "`red`" in crit[2][0]
+    assert [c[1:] for c in crit] == [["5/5", "≥ 4", "erfüllt"], ["4/5", "≥ 4", "erfüllt"], ["4/5", "≥ 4", "erfüllt"]]
+    assert md.rstrip().endswith("Bestätigt.")
+    assert "| 500 | ja | ja | nein |" in md and "| 501 | ja | nein | ja |" in md       # welche Seeds fehlen
+    md = confirmation_markdown(evaluate_confirmation([fake_result(s, ok=s > 501) for s in seeds], seeds))
+    crit = [[c.strip() for c in ln.strip("|").split("|")] for ln in md.splitlines() if ln[:3] in ("| 1", "| 2", "| 3")]
+    assert [c[1:] for c in crit] == [["3/5", "≥ 4", "nicht erfüllt"]] * 3
+    assert "| 500 | nein | nein | nein |" in md and md.rstrip().endswith("eine weitere Runde läuft nur auf neuen Seeds.")
+    assert "Nicht bestätigt" in md
+
+
+def test_main_confirm_appends_section(tmp_path, capsys):
+    for s in range(500, 505):
+        (tmp_path / f"seed_{s}.json").write_text(json.dumps(fake_result(s)))
+    main(["--results", str(tmp_path), "--seeds", "500-504"])
+    assert "Bestätigung" not in capsys.readouterr().out
+    main(["--results", str(tmp_path), "--seeds", "500-504", "--confirm"])
+    out = capsys.readouterr().out
+    assert out.index("## Auswertung") < out.index("## Bestätigung (Spec v2 §8)")
+    assert "Explorative Auswertung (Seeds 500, 501, 502, 503, 504)" in out
+
+
+def test_main_confirm_refuses_main_seeds_with_clear_error(tmp_path, capsys):
+    # auch ohne Ergebnisdateien: der Fehler über die Seeds kommt zuerst, nicht FileNotFoundError
+    with pytest.raises(ValueError, match="Hauptlauf") as exc:
+        main(["--results", str(tmp_path), "--seeds", "400-409", "--confirm"])
+    assert "400" in str(exc.value) and capsys.readouterr().out == ""
+    for s in (409, 500):
+        (tmp_path / f"seed_{s}.json").write_text(json.dumps(fake_result(s)))
+    with pytest.raises(ValueError, match="409"):
+        main(["--results", str(tmp_path), "--seeds", "409,500", "--confirm"])
+    main(["--results", str(tmp_path), "--seeds", "409,500"])         # ohne --confirm bleibt die Auswertung erlaubt
+
+
+# --- Bericht: Seedwerte, Nutzbarkeit, Fehlalarmrate, alte Ergebnisse ---
+
+def seed_table(md):
+    lines = md.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("| Seed |"))
+    rows = []
+    for ln in lines[start + 2:]:
+        if not ln.startswith("|"):
+            break
+        rows.append([c.strip() for c in ln.strip("|").split("|")])
+    header = [c.strip() for c in lines[start].strip("|").split("|")]
+    return header, rows
+
+
+def test_usability_is_gain_of_first_correct_opening_under_red():
+    m = stream_metrics(sysres(110, [(4, 115, 0.9), (C_SPECIAL, 130, 0.07), (C_SPECIAL, 120, 0.04)]),
+                       "red", "B", 100, 300)
+    assert m["usability"] == 0.04                                   # früheste richtige Öffnung, nicht die erste der Liste
+    assert stream_metrics(sysres(110, [(C_SPECIAL, 90, 0.5), (C_SPECIAL, 120, 0.06)]), "red", "B", 100, 300)["usability"] == 0.06
+    assert stream_metrics(sysres(110, [(4, 120, 0.3)]), "red", "B", 100, 300)["usability"] is None
+    assert stream_metrics(sysres(110, [(C_SPECIAL, 90, 0.5)]), "red", "B", 100, 300)["usability"] is None
+    assert stream_metrics(sysres(110, [(C_SPECIAL, 120, 0.5)]), "global", "B", 100, 300)["usability"] is None
+    assert stream_metrics(sysres(110, [(C_SPECIAL, 120)]), "red", "B", 100, 300)["usability"] is None     # kein gain (S1, alt)
+
+
+def test_evaluate_carries_per_seed_values():
+    seeds = [500, 501, 502]
+    rs = [fake_result(500, gain=0.0123), fake_result(501, red_ok=False), fake_result(502, ok=False)]
+    ev = evaluate(rs, seeds)
+    assert [row["seed"] for row in ev["seeds"]] == seeds
+    first = ev["seeds"][0]
+    assert first["premise_ok"] is True and first["color_invariance"] == 0.99 and first["restanteil"] == 0.05
+    assert first["shift"] == 0.1 and first["delta"] == {"M3-B": 0.002, "M3-A": 0.003}
+    assert first["practice"]["M3-B"] == ["Wand"] and first["practice"]["S1-A"] == ["bit3&a0", "bit2&a1"]
+    assert [row["usability"] for row in ev["seeds"]] == [0.0123, None, None]
+    assert ev["seeds"][2]["premise_ok"] is False and ev["seeds"][2]["practice"] == first["practice"]   # steht oben im Ergebnis
+    assert ev["n_null_streams"] == 20
+
+
+def test_report_per_seed_table_values():
+    seeds = [500, 501, 502]
+    rs = [fake_result(500, gain=0.0123), fake_result(501, red_ok=False), fake_result(502, ok=False)]
+    header, rows = seed_table(report_markdown(evaluate(rs, seeds)))
+    assert header[0] == "Seed" and "Farbinvarianz" in header and "Restanteil" in header and "Verschiebung" in header
+    assert [h for h in header if h.startswith("Übungs-Ontologie")] == [f"Übungs-Ontologie {n}" for n in SYSTEMS]
+    assert "δ M3-B" in header and "δ M3-A" in header and "Nutzbarkeit" in header
+    col = {h: i for i, h in enumerate(header)}
+    assert rows[0][col["Seed"]] == "500" and rows[0][col["Prämisse"]] == "erfüllt"
+    assert rows[0][col["Farbinvarianz"]] == "0.990" and rows[0][col["Restanteil"]] == "0.050"
+    assert rows[0][col["Verschiebung"]] == "0.100"
+    assert rows[0][col["Übungs-Ontologie M3-B"]] == "Wand" and rows[0][col["Übungs-Ontologie S1-A"]] == "bit3&a0, bit2&a1"
+    assert rows[0][col["Übungs-Ontologie M3-A"]] == "keine"           # leer ist nicht "unbekannt"
+    assert rows[0][col["δ M3-B"]] == "0.0020" and rows[0][col["δ M3-A"]] == "0.0030"
+    assert rows[0][col["Nutzbarkeit"]] == "0.0123"
+    assert rows[1][col["Nutzbarkeit"]] == "–"                       # M3-B hat in red nichts geöffnet
+    assert rows[2][col["Prämisse"]] == "nicht erfüllt" and rows[2][col["Nutzbarkeit"]] == "–"
+
+
+def legacy_result(seed, **kw):
+    """Ergebnis im v1-Format: ohne practice, delta, gain, restanteil, shift und n_null_streams."""
+    r = fake_result(seed, **kw)
+    for key in ("practice", "delta"):
+        del r[key]
+    for key in ("restanteil", "shift"):
+        del r["premise"][key]
+    del r["config"]["n_null_streams"]
+    for conds in (r["conditions"] or {}).values():
+        for sr in conds.values():
+            del sr["practice"], sr["delta"]
+            for o in sr["opened"]:
+                del o["gain"]
+    return r
+
+
+def test_old_results_without_v2_keys_show_dashes_and_do_not_crash():
+    seeds = list(range(400, 410))
+    md = report_markdown(evaluate([legacy_result(s, ok=s != 409) for s in seeds], seeds))
+    header, rows = seed_table(md)
+    col = {h: i for i, h in enumerate(header)}
+    assert len(rows) == 10
+    for k in ("Restanteil", "Verschiebung", "δ M3-B", "δ M3-A", "Nutzbarkeit") + tuple(f"Übungs-Ontologie {n}" for n in SYSTEMS):
+        assert {r[col[k]] for r in rows} == {"–"}, k
+    assert rows[0][col["Farbinvarianz"]] == "0.990"                 # was es gab, bleibt sichtbar
+    assert "Fehlalarmrate" in md and "4,8" not in md                # Anzahl der Null-Ströme unbekannt
+
+
+def test_null_values_in_json_premise_show_dashes():            # nicht endlicher Restanteil steht als null im JSON
+    r = fake_result(500)
+    r["premise"].update(restanteil=None, shift=None, ok=False)
+    r["conditions"] = None
+    header, rows = seed_table(report_markdown(evaluate([r], [500])))
+    col = {h: i for i, h in enumerate(header)}
+    assert rows[0][col["Restanteil"]] == "–" and rows[0][col["Verschiebung"]] == "–"
+
+
+def test_expected_false_alarm_rate_line():
+    def line(n_null, **cfg):
+        rs = [fake_result(s) for s in (500, 501)]
+        for r in rs:
+            r["config"].update(n_null_streams=n_null, **cfg)
+        md = report_markdown(evaluate(rs, [500, 501]))
+        return next(ln for ln in md.splitlines() if "Fehlalarmrate" in ln)
+    assert "1/21" in line(20) and "4,8 %" in line(20)
+    assert "1/10" in line(9) and "10,0 %" in line(9)
+    assert "." not in line(20).split("≈")[-1].split("%")[0]            # deutsches Komma
+    # v1-Ergebnisse (max_null_alarms = 1) hatten eine doppelt so hohe Rate: (k + 1)/(n + 1)
+    assert "2/21" in line(20, max_null_alarms=1) and "9,5 %" in line(20, max_null_alarms=1)
+
+
+def test_empty_practice_ontology_is_shown_as_none_not_as_missing():
+    r = fake_result(500)
+    r["practice"] = {n: [] for n in SYSTEMS}
+    header, rows = seed_table(report_markdown(evaluate([r], [500])))
+    assert [c for h, c in zip(header, rows[0]) if h.startswith("Übungs-Ontologie")] == ["keine"] * len(SYSTEMS)
