@@ -1,7 +1,9 @@
 import numpy as np
 
 from farbversuch import monitor
+from farbversuch.forward import fit_logreg, fwd_design, mean_loglik
 from farbversuch.monitor import FitStats, cv_folds, m3_explain, m3_improvements, m3_null_gain, pre_open_m3, select_m3
+from farbversuch.world import N_DISP
 
 
 def slide_data(n=1500, seed=0):
@@ -82,3 +84,40 @@ def test_pre_open_m3_cap_and_determinism(monkeypatch):         # Review Focus 1
     Z, A, D, F = slide_data()
     r1 = pre_open_m3(Z, A, D, F, lambda r: np.random.default_rng(r), delta=.01)
     assert r1 == pre_open_m3(Z, A, D, F, lambda r: np.random.default_rng(r), delta=.01) == [0]
+
+
+def _naive_improvements(Z, A, D, F, rng, test_fold_coefs=False, l2=1e-3, n_folds=5):
+    """Referenz zu Plan v2, Festlegung 3, Kandidat für Kandidat: Rest der Testzeilen mit den Koeffizienten der
+    Trainingsteilung (test_fold_coefs=True: die falsche Variante mit eigener Regression auf der Testteilung)."""
+    folds = cv_folds(len(A), rng, n_folds)
+    Xb = fwd_design(Z, A)
+    imp = np.zeros((F.shape[1], n_folds))
+    for f, test in enumerate(folds):
+        train = np.setdiff1d(np.arange(len(A)), test)
+        Wb, _ = fit_logreg(Xb[train], D[train], N_DISP, l2)
+        llb = mean_loglik(Xb[test], D[test], Wb)
+        for j in range(F.shape[1]):
+            f_tr, f_te = F[train, j].astype(float), F[test, j].astype(float)
+            coef = np.linalg.lstsq(Xb[train], f_tr, rcond=None)[0]
+            coef_te = np.linalg.lstsq(Xb[test], f_te, rcond=None)[0] if test_fold_coefs else coef
+            r_tr, r_te = f_tr - Xb[train] @ coef, f_te - Xb[test] @ coef_te
+            We, _ = fit_logreg(np.column_stack([Xb[train], r_tr]), D[train], N_DISP, l2,
+                               W0=np.vstack([Wb, np.zeros((1, N_DISP))]))
+            imp[j, f] = mean_loglik(np.column_stack([Xb[test], r_te]), D[test], We) - llb
+    return imp
+
+
+def test_test_rows_are_residualised_with_the_train_fold_coefficients():
+    # Kandidaten hängen mit z und der Aktion zusammen: die Koeffizienten von Trainings- und Testteilung unterscheiden
+    # sich, also auch der Rest der Testzeilen je nach Variante
+    rng = np.random.default_rng(3); n = 600
+    Z, A = rng.normal(size=(n, 3)), rng.integers(4, size=n)
+    sig = (Z[:, 0] + rng.normal(size=n) > .5).astype(np.uint8)
+    act = ((A == 1) | (rng.random(n) < .2)).astype(np.uint8)
+    D = 1 + A; slide = (sig == 1) & (rng.random(n) < .5); D[slide] = 5 + A[slide]
+    F = np.stack([sig, act], 1)
+    imp, cands = m3_improvements(Z, A, D, F, [], np.random.default_rng(7))
+    reference = _naive_improvements(Z, A, D, F, np.random.default_rng(7))
+    leaky = _naive_improvements(Z, A, D, F, np.random.default_rng(7), test_fold_coefs=True)
+    assert list(cands) == [0, 1] and np.abs(leaky - reference).max() > 1e-4      # der Fall trennt die Varianten
+    assert np.allclose(imp, reference, rtol=0, atol=1e-10)
