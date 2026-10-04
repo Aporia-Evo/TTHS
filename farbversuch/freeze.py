@@ -64,6 +64,8 @@ def _check(root: Path) -> tuple[list[str], list[str]]:
     if not sums:                                    # nichts zum Vergleichen: jede weitere Meldung wäre Rauschen
         return [SUMS_REL], []
     bad = [] if intact else [SUMS_REL]
+    if CONFIG_REL not in sums:
+        bad.append(CONFIG_REL)                  # JSON gehört nicht zu source_files, muss aber eingefroren sein
     bad += [rel for rel, digest in sums.items() if not (root / rel).is_file() or _sha256(root / rel) != digest]
     new = [p.as_posix() for p in source_files(root) if p.as_posix() not in sums]
     return sorted(bad), sorted(new)

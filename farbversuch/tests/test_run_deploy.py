@@ -526,3 +526,50 @@ def test_main_runs_no_pool_when_every_seed_is_done(tmp_path, monkeypatch):
     monkeypatch.setattr(run.multiprocessing, "get_context", lambda *a: pytest.fail("kein Pool nötig"))
     main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o")])
     assert sorted(x.name for x in (tmp_path / "o").iterdir()) == ["seed_0.json"]
+
+
+@pytest.mark.parametrize("contents", [b"", b"broken pickle", pickle.dumps({}), pickle.dumps(None)])
+def test_prepare_job_recomputes_unusable_intermediate_files(tmp_path, monkeypatch, contents):
+    work = tmp_path / ".work"
+    work.mkdir()
+    path = work / "seed_0.prep.pkl"
+    path.write_bytes(contents)
+    calls = []
+    monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: calls.append(seed) or _stub_prep(cfg, seed=seed))
+    assert run._prepare_job((0, TINY, str(tmp_path))) == (0, True)
+    assert calls == [0] and isinstance(pickle.loads(path.read_bytes()), Prepared)
+
+
+@pytest.mark.parametrize("contents", [b"", b'{"config":', b"\xff", b"[]", b"null"])
+def test_deploy_job_recomputes_unusable_intermediate_files(tmp_path, monkeypatch, contents):
+    work = tmp_path / ".work"
+    work.mkdir()
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(_stub_prep()))
+    path = work / "seed_0.red.json"
+    path.write_bytes(contents)
+    calls = []
+    monkeypatch.setattr(run, "deploy", lambda seed, cfg, p1, pg, condition: calls.append(condition) or {"fresh": True})
+    run._deploy_job((0, TINY, str(tmp_path), "red"))
+    assert calls == ["red"] and json.loads(path.read_text())["result"] == {"fresh": True}
+
+
+@pytest.mark.parametrize("missing", ["result", "sec"])
+def test_deploy_job_recomputes_incomplete_intermediate_files(tmp_path, monkeypatch, missing):
+    stored = _cond_file()
+    del stored[missing]
+    test_deploy_job_recomputes_unusable_intermediate_files(tmp_path, monkeypatch, json.dumps(stored).encode())
+
+
+def test_intermediate_recovery_still_propagates_calculation_errors(tmp_path, monkeypatch):
+    work = tmp_path / ".work"
+    work.mkdir()
+    path = work / "seed_0.prep.pkl"
+    path.write_bytes(b"broken pickle")
+
+    def fail(seed, cfg):
+        raise RuntimeError("Berechnung fehlgeschlagen")
+
+    monkeypatch.setattr(run, "prepare_seed", fail)
+    with pytest.raises(RuntimeError, match="Berechnung fehlgeschlagen"):
+        run._prepare_job((0, TINY, str(tmp_path)))
+    assert path.read_bytes() == b"broken pickle"

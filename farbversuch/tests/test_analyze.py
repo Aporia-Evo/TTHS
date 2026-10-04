@@ -654,3 +654,41 @@ def test_empty_practice_ontology_is_shown_as_none_not_as_missing():
     r["practice"] = {n: [] for n in SYSTEMS}
     header, rows = seed_table(report_markdown(evaluate([r], [500])))
     assert [c for h, c in zip(header, rows[0]) if h.startswith("Übungs-Ontologie")] == ["keine"] * len(SYSTEMS)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("restanteil", None), ("restanteil", float("nan")), ("restanteil", float("inf")),
+    ("restanteil", .151), ("restanteil", "0.05"), ("restanteil", True),
+    ("shift", None), ("shift", float("nan")), ("shift", float("inf")), ("shift", .251),
+    ("color_invariance", .949), ("fwd_surprise", 1.5), ("freq_surprise", None),
+])
+def test_unverified_premise_never_counts_as_success(field, value):
+    rs = [fake_result(s) for s in MAIN_SEEDS]
+    rs[0]["premise"][field] = value                  # gespeichertes ok=True ist veraltet oder widersprüchlich
+    ev = evaluate(rs, MAIN_SEEDS)
+    assert ev["P1"]["failed_seeds"] == [400]
+    assert ev["P2"]["count"] == ev["P3"]["count"] == 9
+    assert not ev["seeds"][0]["premise_ok"]
+    assert ev["seeds"][0]["usability"] is None
+    rs[0]["seed"] = 500
+    confirmation = evaluate_confirmation([rs[0]], [500])
+    assert not confirmation["confirmed"]
+    assert confirmation["per_seed"][500] == {"premise": False, "no_false_open": False, "red_correct": False}
+
+
+def test_legacy_results_cannot_confirm_v2_without_p1b_measurements():
+    seeds = list(range(500, 505))
+    ev = evaluate_confirmation([legacy_result(s) for s in seeds], seeds)
+    assert not ev["confirmed"] and ev["premise"]["count"] == 0
+    main_ev = evaluate([legacy_result(s) for s in MAIN_SEEDS], MAIN_SEEDS)
+    assert main_ev["P1"]["failed_seeds"] == list(MAIN_SEEDS)
+    assert main_ev["P2"]["count"] == 0 and main_ev["abort"]["triggered"]
+
+
+def test_premise_validation_uses_recorded_config_and_inclusive_limits():
+    r = fake_result(500)
+    r["config"].update(min_invariance=.9, max_restanteil=.2, max_shift=.3)
+    r["premise"].update(color_invariance=.9, restanteil=.2, shift=.3)
+    assert evaluate_confirmation([r], [500])["confirmed"]
+    r["premise"]["ok"] = False
+    assert not evaluate_confirmation([r], [500])["confirmed"]

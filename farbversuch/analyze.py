@@ -2,9 +2,11 @@
 für BERICHT.md. Der Auswerter darf C_SPECIAL kennen; er gehört nicht zu den Systemen."""
 import argparse
 import json
+import math
 from collections.abc import Sequence
 from pathlib import Path
 
+from farbversuch.config import Config
 from farbversuch.monitor import SYSTEMS
 from farbversuch.run import CONDITIONS, duplicates, parse_seeds
 from farbversuch.world import CH_COLOR, C_SPECIAL, DELTAS, HALF, OBS_DIM, obs_index
@@ -112,11 +114,29 @@ def _select(results: Sequence[dict], seeds: Sequence[int]) -> list[dict]:
 
 def _m3b_red(r: dict) -> dict | None:
     """Kennzahlen von M3-B unter `red`; None bei gescheiterter Prämisse (dann gibt es keine Bedingungen)."""
-    if not r.get("conditions"):
+    if not _premise_ok(r) or not r.get("conditions"):
         return None
     cfg = r["config"]
     switch = cfg["switch_episode"]
     return stream_metrics(r["conditions"]["red"]["M3-B"], "red", "B", switch, cfg["n_deploy_episodes"] - switch)
+
+
+def _finite_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _premise_ok(r: dict) -> bool:
+    """P1 und P1b müssen durch Messwerte belegt sein. Ein altes oder widersprüchliches
+    ok-Flag allein genügt nicht; fehlende v2-Messwerte zählen nicht als erfüllte Prämisse."""
+    p = r["premise"]
+    keys = ("color_invariance", "fwd_surprise", "freq_surprise", "restanteil", "shift")
+    if p.get("ok") is not True or not all(_finite_number(p.get(k)) for k in keys):
+        return False
+    cfg, defaults = r["config"], Config()
+    return (p["color_invariance"] >= cfg.get("min_invariance", defaults.min_invariance)
+            and p["fwd_surprise"] < p["freq_surprise"]
+            and p["restanteil"] <= cfg.get("max_restanteil", defaults.max_restanteil)
+            and p["shift"] <= cfg.get("max_shift", defaults.max_shift))
 
 
 def _seed_row(r: dict) -> dict:
@@ -124,7 +144,7 @@ def _seed_row(r: dict) -> dict:
     premise = r["premise"]
     practice = r.get("practice")
     m = _m3b_red(r)
-    return {"seed": r["seed"], "premise_ok": bool(premise["ok"]),
+    return {"seed": r["seed"], "premise_ok": _premise_ok(r),
             "color_invariance": premise.get("color_invariance"), "restanteil": premise.get("restanteil"),
             "shift": premise.get("shift"),
             "practice": None if practice is None else {n: [e["name"] for e in es] for n, es in practice.items()},
@@ -135,8 +155,8 @@ def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
     """Zählt und misst immer; Urteile (`fulfilled`, `triggered`) gibt es nur für die vorregistrierten MAIN_SEEDS, sonst None."""
     rs = _select(results, seeds)
     cfg0 = (rs[0].get("config") or {}) if rs else {}               # die Konfigurationen sind identisch (_select)
-    ok = [r for r in rs if r["premise"]["ok"]]
-    failed = [r["seed"] for r in rs if not r["premise"]["ok"]]
+    ok = [r for r in rs if _premise_ok(r)]
+    failed = [r["seed"] for r in rs if not _premise_ok(r)]
 
     pairs: dict[str, dict[str, list]] = {n: {c: [] for c in CONDITIONS} for n in SYSTEMS}
     for r in ok:
@@ -193,7 +213,7 @@ def evaluate_confirmation(results: Sequence[dict], seeds: Sequence[int]) -> dict
     need = -(-4 * n // 5)                                      # ⌈0,8·n⌉ ohne Gleitkomma
     per_seed = {}
     for r in rs:
-        ok = bool(r["premise"]["ok"])
+        ok = _premise_ok(r)
         # geöffnet = nur Wiederöffnungen; die Übungs-Ontologie steht nicht in "opened"
         quiet = ok and all(not r["conditions"][c]["M3-B"]["opened"] for c in ("none", "global"))
         per_seed[r["seed"]] = {"premise": ok, "no_false_open": quiet, "red_correct": ok and bool(_m3b_red(r)["correct"])}
@@ -208,7 +228,7 @@ def evaluate_confirmation(results: Sequence[dict], seeds: Sequence[int]) -> dict
 
 
 def _f(x, nd: int = 1) -> str:
-    if x is None:
+    if not _finite_number(x):
         return "–"
     return str(x) if isinstance(x, int) else f"{x:.{nd}f}"
 
@@ -280,7 +300,8 @@ def report_markdown(ev: dict) -> str:
                    if ab["triggered"] else "Abbruchkriterium nicht ausgelöst.")
     out += ["", "### Werte je Seed", ""]
     out += _seed_values_table(ev)
-    out += ["Prämisse umfasst P1 und P1b. Restanteil und Verschiebung gehören zu P1b. Übungs-Ontologie: vor dem Einsatz "
+    out += ["Prämisse umfasst P1 und P1b; fehlende oder ungültige Messwerte zählen nicht als erfüllt. "
+            "Restanteil und Verschiebung gehören zu P1b. Übungs-Ontologie: vor dem Einsatz "
             "geöffnete Merkmale des jeweiligen Systems; sie zählen nie als geöffnet. δ: Mindestverbesserung aus den "
             "Null-Strömen. Nutzbarkeit: mittlere Verbesserung (nats pro Schritt) des Merkmals „Farbe 0“ bei der ersten "
             "richtigen Öffnung durch M3-B unter `red`. „–“: im Ergebnis nicht enthalten oder keine richtige Öffnung.", ""]

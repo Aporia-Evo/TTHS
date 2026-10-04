@@ -440,8 +440,14 @@ def _prepare_job(task: tuple[int, Config, str]) -> tuple[int, bool]:
     work = Path(out) / ".work"
     work.mkdir(parents=True, exist_ok=True)
     path = work / f"seed_{seed}.prep.pkl"
-    prep = _load_prep(work, seed) if path.exists() else None
-    if prep is not None and prep.config == cfg.as_dict() and getattr(prep, "fingerprint", None) == fingerprint():
+    try:
+        prep = _load_prep(work, seed) if path.exists() else None
+    except (pickle.UnpicklingError, EOFError, AttributeError, ImportError, ValueError, TypeError) as exc:
+        _log(f"seed {seed} Vorbereitung unlesbar ({type(exc).__name__}); wird neu berechnet")
+        prep = None
+    if (isinstance(prep, Prepared) and getattr(prep, "seed", None) == seed
+            and getattr(prep, "config", None) == cfg.as_dict()
+            and getattr(prep, "fingerprint", None) == fingerprint()):
         _log(f"seed {seed} Vorbereitung übernommen")
     else:
         prep = prepare_seed(seed, cfg)
@@ -456,8 +462,13 @@ def _deploy_job(task: tuple[int, Config, str, str]) -> tuple[int, str]:
     work = Path(out) / ".work"
     path = work / f"seed_{seed}.{condition}.json"
     origin = fingerprint()
-    stored = json.loads(path.read_text()) if path.exists() else {}
-    if stored.get("config") == cfg.as_dict() and stored.get("fingerprint") == origin:
+    try:
+        stored = json.loads(path.read_text()) if path.exists() else {}
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        _log(f"seed {seed} Bedingung {condition} unlesbar ({type(exc).__name__}); wird neu berechnet")
+        stored = {}
+    if (isinstance(stored, dict) and stored.get("config") == cfg.as_dict()
+            and stored.get("fingerprint") == origin and {"result", "sec"} <= stored.keys()):
         _log(f"seed {seed} Bedingung {condition} übernommen")
     else:
         result, sec = _deploy_timed(_load_prep(work, seed), cfg, condition)
