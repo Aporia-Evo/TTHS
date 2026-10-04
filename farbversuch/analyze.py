@@ -2,9 +2,11 @@
 für BERICHT.md. Der Auswerter darf C_SPECIAL kennen; er gehört nicht zu den Systemen."""
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from farbversuch import freeze
 from farbversuch.monitor import SYSTEMS
 from farbversuch.run import CONDITIONS, duplicates, parse_seeds
 from farbversuch.world import CH_COLOR, C_SPECIAL, DELTAS, HALF, OBS_DIM, obs_index
@@ -367,6 +369,22 @@ def load_results(results_dir: str | Path, seeds: Sequence[int]) -> list[dict]:
     return out
 
 
+def freeze_problems(results: Sequence[dict], root: Path) -> list[str]:
+    """Was die vorregistrierten Urteile nicht deckt: Prüfsummen (freeze verify) und frozen_config.json gegen die
+    Konfiguration der Ergebnisse. [] = in Ordnung."""
+    problems = []
+    if bad := freeze.verify_freeze(root):
+        problems.append(f"freeze.sha256 bestätigt die Quelldateien nicht ({', '.join(bad)})")
+    try:
+        frozen = json.loads((root / freeze.CONFIG_REL).read_text())
+    except (OSError, ValueError):
+        problems.append(f"{freeze.CONFIG_REL} fehlt oder ist unlesbar")
+    else:
+        if differing := [r["seed"] for r in results if r.get("config") != frozen]:
+            problems.append(f"Konfiguration der Ergebnisse weicht von {freeze.CONFIG_REL} ab (Seeds {differing})")
+    return problems
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m farbversuch.analyze", description="Farbversuch: Ergebnisse auswerten")
     ap.add_argument("--results", required=True, help="Ordner mit seed_<n>.json")
@@ -381,6 +399,12 @@ def main(argv: list[str] | None = None) -> None:
     out = report_markdown(evaluate(results, seeds))
     if args.confirm:
         out += "\n" + confirmation_markdown(evaluate_confirmation(results, seeds))
+    if set(seeds) == set(MAIN_SEEDS) and (problems := freeze_problems(results, freeze.REPO_ROOT)):
+        # kein Fehler (der Bericht entsteht trotzdem), aber oben und auf stderr, damit niemand es übersieht
+        warning = ("> **WARNUNG: Die Urteile zu P2–P5 und zum Abbruchkriterium sind nicht durch das Einfrieren "
+                   "gedeckt:** " + "; ".join(problems) + ".")
+        print(warning, file=sys.stderr)
+        out = warning + "\n\n" + out
     print(out)
 
 

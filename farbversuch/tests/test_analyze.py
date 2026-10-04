@@ -2,6 +2,9 @@ import json
 
 import pytest
 
+from farbversuch import freeze
+from farbversuch.config import Config
+
 from farbversuch.analyze import (MAIN_SEEDS, confirmation_markdown, evaluate, evaluate_confirmation, is_colour,
                                  is_correct, load_results, main, report_markdown, stream_metrics)
 from farbversuch.monitor import SYSTEMS
@@ -808,3 +811,66 @@ def test_empty_practice_ontology_is_shown_as_none_not_as_missing():
     r["practice"] = {n: [] for n in SYSTEMS}
     header, rows = seed_table(report_markdown(evaluate([r], [500])))
     assert [c for h, c in zip(header, rows[0]) if h.startswith("Übungs-Ontologie")] == ["keine"] * len(SYSTEMS)
+
+
+# --- Hauptlauf nur mit intaktem Einfrieren (M5) ---
+
+def frozen_tree(tmp_path, cfg=Config()):
+    """Mini-Repo mit eingefrorener Konfiguration und Prüfsummen."""
+    (tmp_path / "farbversuch").mkdir(parents=True)
+    (tmp_path / "farbversuch" / "a.py").write_text("x = 1\n")
+    freeze.write_freeze(tmp_path, cfg)
+    return tmp_path
+
+
+def main_results(tmp_path, cfg=Config()):
+    results = tmp_path / "results"; results.mkdir()
+    for s in MAIN_SEEDS:
+        (results / f"seed_{s}.json").write_text(json.dumps({**fake_result(s), "config": cfg.as_dict()}))
+    return results
+
+
+def run_main_seeds(results, capsys):
+    main(["--results", str(results), "--seeds", "400-409"])
+    return capsys.readouterr()
+
+
+def test_main_seeds_with_intact_freeze_print_no_warning(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(freeze, "REPO_ROOT", frozen_tree(tmp_path / "repo"))
+    cap = run_main_seeds(main_results(tmp_path), capsys)
+    assert cap.out.startswith("## Auswertung") and "WARNUNG" not in cap.out and cap.err == ""
+    assert "| erfüllt |" in row(cap.out, "P2")
+
+
+def test_main_seeds_without_freeze_warn_loudly_but_still_report(tmp_path, monkeypatch, capsys):
+    (tmp_path / "repo" / "farbversuch").mkdir(parents=True)
+    monkeypatch.setattr(freeze, "REPO_ROOT", tmp_path / "repo")
+    cap = run_main_seeds(main_results(tmp_path), capsys)
+    first = cap.out.splitlines()[0]
+    assert "WARNUNG" in first and "freeze.sha256" in first and "frozen_config.json" in first
+    assert "WARNUNG" in cap.err and "## Auswertung" in cap.out and "| erfüllt |" in row(cap.out, "P2")
+
+
+def test_main_seeds_warn_when_sources_changed_after_the_freeze(tmp_path, monkeypatch, capsys):
+    repo = frozen_tree(tmp_path / "repo")
+    (repo / "farbversuch" / "a.py").write_text("x = 2\n")
+    monkeypatch.setattr(freeze, "REPO_ROOT", repo)
+    cap = run_main_seeds(main_results(tmp_path), capsys)
+    assert "WARNUNG" in cap.out.splitlines()[0] and "farbversuch/a.py" in cap.out.splitlines()[0]
+    assert "frozen_config.json" not in cap.out.splitlines()[0] and "farbversuch/a.py" in cap.err
+
+
+def test_main_seeds_warn_when_results_used_another_config(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(freeze, "REPO_ROOT", frozen_tree(tmp_path / "repo", Config(epochs=7)))
+    cap = run_main_seeds(main_results(tmp_path), capsys)
+    first = cap.out.splitlines()[0]
+    assert "WARNUNG" in first and "frozen_config.json" in first and "Konfiguration" in first and "WARNUNG" in cap.err
+
+
+def test_other_seed_sets_do_not_check_the_freeze(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(freeze, "verify_freeze", lambda root: pytest.fail("nur für 400–409"))
+    for s in range(500, 505):
+        (tmp_path / f"seed_{s}.json").write_text(json.dumps(fake_result(s)))
+    main(["--results", str(tmp_path), "--seeds", "500-504", "--confirm"])
+    main(["--results", str(tmp_path), "--seeds", "500-503"])
+    assert "WARNUNG" not in capsys.readouterr().out
