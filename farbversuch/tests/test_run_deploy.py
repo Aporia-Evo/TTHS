@@ -110,6 +110,25 @@ def test_cli_rejects_duplicate_seeds_before_running_anything(tmp_path, monkeypat
     assert not list((tmp_path / "o").glob("*"))
 
 
+def test_atomic_write_syncs_the_temp_file_before_the_rename(tmp_path, monkeypatch):
+    events = []
+    real_fsync, real_replace = os.fsync, os.replace
+
+    def fsync(fd):                                # welche Datei? über die Inode, ohne /proc
+        ino = os.fstat(fd).st_ino
+        events.append(("fsync", next(x.name for x in tmp_path.iterdir() if x.stat().st_ino == ino)))
+        real_fsync(fd)
+    monkeypatch.setattr(os, "fsync", fsync)
+    monkeypatch.setattr(os, "replace", lambda src, dst: (events.append(("replace", os.path.basename(src))),
+                                                         real_replace(src, dst)))
+    run._write_atomic(tmp_path / "seed_5.json", json.dumps({"seed": 5}))
+    run._write_atomic(tmp_path / "x.bin", b"\x00\x01")
+    tmp5, tmpx = f"seed_5.json.{os.getpid()}.tmp", f"x.bin.{os.getpid()}.tmp"
+    assert events == [("fsync", tmp5), ("replace", tmp5), ("fsync", tmpx), ("replace", tmpx)]
+    assert json.loads((tmp_path / "seed_5.json").read_text()) == {"seed": 5}
+    assert (tmp_path / "x.bin").read_bytes() == b"\x00\x01"
+
+
 def test_atomic_write_temp_file_name_includes_the_process_id(tmp_path, monkeypatch):
     seen = []
     real_replace = os.replace
@@ -532,6 +551,46 @@ def test_fingerprint_follows_source_and_environment_but_not_tests(tmp_path, monk
 
 def test_fingerprint_covers_the_package_sources():
     assert run._SRC_DIR == Path(run.__file__).resolve().parent and (run._SRC_DIR / "run.py").exists()
+
+
+@pytest.mark.parametrize("content", [b"kaputt", pickle.dumps(_stub_prep())[:40], pickle.dumps({"seed": 0}), b""],
+                         ids=["muell", "abgeschnitten", "fremdes-objekt", "leer"])
+def test_prepare_job_recomputes_an_unreadable_pickle_and_says_so(tmp_path, monkeypatch, capsys, content):
+    work = tmp_path / ".work"; work.mkdir()
+    f = work / "seed_0.prep.pkl"; f.write_bytes(content)                 # Müll, abgeschnitten, fremdes Objekt, leer
+    calls = []
+    monkeypatch.setattr(run, "prepare_seed", lambda seed, cfg: calls.append(seed) or _stub_prep(cfg, seed=seed))
+    assert run._prepare_job((0, TINY, str(tmp_path))) == (0, True)
+    assert calls == [0] and pickle.loads(f.read_bytes()).config == TINY.as_dict()
+    if content != pickle.dumps({"seed": 0}):                             # lesbar, nur fremd: keine Meldung nötig
+        assert "seed_0.prep.pkl" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("content", ["{kaputt", "", "[1, 2]", '{"config": 1'],
+                         ids=["muell", "leer", "liste", "abgeschnitten"])
+def test_deploy_job_recomputes_an_unreadable_condition_file_and_says_so(tmp_path, monkeypatch, capsys, content):
+    work = tmp_path / ".work"; work.mkdir()
+    (work / "seed_0.prep.pkl").write_bytes(pickle.dumps(_stub_prep()))
+    f = work / "seed_0.red.json"; f.write_text(content)
+    monkeypatch.setattr(run, "deploy",
+                        lambda seed, cfg, p1, p_global, condition: {"fresh": [seed, p_global, condition]})
+    run._deploy_job((0, TINY, str(tmp_path), "red"))
+    got = json.loads(f.read_text())
+    assert got["result"] == {"fresh": [0, .4, "red"]} and got["fingerprint"] == run.fingerprint()
+    assert "seed_0.red.json unlesbar" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("content", ["{kaputt", "", "[1]"], ids=["muell", "leer", "liste"])
+def test_unreadable_result_file_stops_main_with_a_clear_message(tmp_path, monkeypatch, content):
+    out = tmp_path / "o"; out.mkdir()
+    f = out / "seed_0.json"; f.write_text(content)
+    before = (f.read_bytes(), f.stat().st_mtime_ns)
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    monkeypatch.setattr(run.multiprocessing, "get_context", lambda *a: pytest.fail("nichts darf starten"))
+    with pytest.raises(SystemExit, match="seed_0.json.*verschieben oder löschen"):
+        main(["--config", str(cfg), "--seeds", "0-1", "--out", str(out)])
+    assert (f.read_bytes(), f.stat().st_mtime_ns) == before
+    assert sorted(x.name for x in out.iterdir()) == ["seed_0.json"]
 
 
 def test_prepare_job_creates_the_work_directory(tmp_path, monkeypatch):

@@ -479,17 +479,38 @@ def parse_seeds(s: str) -> list[int]:
 
 
 def _write_atomic(path: Path, data: str | bytes) -> None:
-    """Ein Abbruch hinterlässt keine Teildatei; die Prozess-ID im Namen verhindert Kollisionen zweier Prozesse."""
+    """Ein Abbruch hinterlässt keine Teildatei; die Prozess-ID im Namen verhindert Kollisionen zweier Prozesse. Der
+    Inhalt liegt auf dem Datenträger (fsync), bevor die Datei ihren Namen bekommt."""
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    if isinstance(data, bytes):
-        tmp.write_bytes(data)
-    else:
-        tmp.write_text(data)
+    with open(tmp, "wb") as f:
+        f.write(data if isinstance(data, bytes) else data.encode())
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
 def _load_prep(work: Path, seed: int) -> Prepared:
     return pickle.loads((work / f"seed_{seed}.prep.pkl").read_bytes())
+
+
+def _json_object(path: Path) -> dict:
+    """Inhalt einer JSON-Datei, die ein Objekt sein muss; sonst ValueError (auch bei kaputtem JSON)."""
+    stored = json.loads(path.read_text())
+    if not isinstance(stored, dict):
+        raise ValueError("kein JSON-Objekt")
+    return stored
+
+
+def _load_work(path: Path, load: Callable[[Path], object]) -> object | None:
+    """Ein Zwischenstand oder None, wenn er fehlt. Ein unlesbarer oder beschädigter Zwischenstand (abgeschnitten,
+    voller Datenträger, Pickle aus anderem Code) zählt als fehlend und wird neu berechnet; das steht auf stderr."""
+    if not path.exists():
+        return None
+    try:
+        return load(path)
+    except Exception as e:                       # Unpickling kann fast jede Ausnahme auslösen
+        _log(f"{path.name} unlesbar ({type(e).__name__}), wird neu berechnet")
+        return None
 
 
 # Die drei Stufen von main. Die Arbeiter sind top-level, damit spawn sie importieren kann; Zwischenstände liegen in
@@ -500,8 +521,8 @@ def _prepare_job(task: tuple[int, Config, str]) -> tuple[int, bool]:
     work = Path(out) / ".work"
     work.mkdir(parents=True, exist_ok=True)
     path = work / f"seed_{seed}.prep.pkl"
-    prep = _load_prep(work, seed) if path.exists() else None
-    if prep is not None and prep.config == cfg.as_dict() and getattr(prep, "fingerprint", None) == fingerprint():
+    prep = _load_work(path, lambda p: pickle.loads(p.read_bytes()))
+    if getattr(prep, "config", None) == cfg.as_dict() and getattr(prep, "fingerprint", None) == fingerprint():
         _log(f"seed {seed} Vorbereitung übernommen")
     else:
         prep = prepare_seed(seed, cfg)
@@ -516,7 +537,7 @@ def _deploy_job(task: tuple[int, Config, str, str]) -> tuple[int, str]:
     work = Path(out) / ".work"
     path = work / f"seed_{seed}.{condition}.json"
     origin = fingerprint()
-    stored = json.loads(path.read_text()) if path.exists() else {}
+    stored = _load_work(path, _json_object) or {}
     if stored.get("config") == cfg.as_dict() and stored.get("fingerprint") == origin:
         _log(f"seed {seed} Bedingung {condition} übernommen")
     else:
@@ -573,7 +594,11 @@ def main(argv: list[str] | None = None) -> None:
         if not path.exists():
             todo.append(s)
             continue
-        stored = json.loads(path.read_text())
+        try:
+            stored = _json_object(path)
+        except (OSError, ValueError) as e:
+            raise SystemExit(f"Abbruch: {path} ist nicht lesbar oder beschädigt ({e}). Die Datei verschieben oder "
+                             f"löschen, dann denselben Befehl erneut starten.") from None
         if stored.get("config") != cfg.as_dict():
             foreign.append(f"{path} (andere Konfiguration)")
         elif stored.get("fingerprint") != origin:
