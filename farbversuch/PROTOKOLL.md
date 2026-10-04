@@ -50,3 +50,16 @@ Maschine aller Läufe: Cloud-Container, 4 Kerne, Python 3.11.15, numpy 2.4.6, BL
 - **Laufzeit:** Phase 1 1801 s, davon δ M3-A ≈ 22,5 min. Bedingungen: none 1114 s, red 2063 s, global 2639 s, walls 1 s. M3-A dominiert.
 
 Keine weitere Änderung. Die Pilot-Konfiguration ist damit fertig.
+
+## Bestätigung 500–504 (04.10.2026, keine Konfigurationsänderung)
+
+**Lauf:** mit derselben `pilot_config.json` (wd 0,01), `--jobs 4`, Start 08:41:51, Ende 10:01:25.
+
+**Ergebnis: nicht bestätigt.** Nur 2 von 5 Seeds erfüllen alle drei Kriterien gleichzeitig, nötig sind 4.
+- **Prämisse:** erfüllt bei 500 (Invarianz 0,967) und 502 (0,980). Gescheitert an P1 bei 501 (0,939), 503 (0,941) und 504 (0,946). P1b ist auf allen fünf Seeds erfüllt (Restanteil ≤ 0,065, Verschiebung ≤ 0,104).
+- **Seeds 500 und 502:**
+  - M3-B öffnet bei `none` und `global` nichts.
+  - Bei `red` öffnet M3-B „Farbe 0“ nach dem Wechsel (bei 130 bzw. 140).
+  - Bei 500 öffnet M3-B unter `red` zusätzlich „Farbe 3“ (Gewinn 0,0005, knapp über δ 0,0005).
+
+Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen Seeds (510–514 usw.). Details: `results/confirm_report.md`.

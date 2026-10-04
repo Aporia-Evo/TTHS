@@ -1,0 +1,52 @@
+08:41:51 seed 500 gestartet
+08:41:51 seed 501 gestartet
+08:41:51 seed 502 gestartet
+08:41:51 seed 503 gestartet
+08:43:11 seed 501 Routine trainiert (80 s)
+08:43:12 seed 501 Vorwärtsmodell fertig (2 s)
+08:43:14 seed 500 Routine trainiert (83 s)
+08:43:15 seed 500 Vorwärtsmodell fertig (1 s)
+08:43:15 seed 501 Prämisse nicht erfüllt (Invarianz 0.939, Restanteil 0.011, Verschiebung 0.082)
+08:43:15 seed 504 gestartet
+08:43:16 seed 502 Routine trainiert (85 s)
+08:43:16 seed 503 Routine trainiert (85 s)
+08:43:17 seed 502 Vorwärtsmodell fertig (2 s)
+08:43:18 seed 503 Vorwärtsmodell fertig (1 s)
+08:43:18 seed 500 Prämisse ok (Invarianz 0.967, Restanteil 0.029, Verschiebung 0.104)
+08:43:20 seed 500 Vor-Öffnen M3-B: Wand
+08:43:20 seed 502 Prämisse ok (Invarianz 0.980, Restanteil 0.065, Verschiebung 0.104)
+08:43:21 seed 503 Prämisse nicht erfüllt (Invarianz 0.941, Restanteil 0.004, Verschiebung 0.080)
+08:43:22 seed 502 Vor-Öffnen M3-B: Wand
+08:44:39 seed 504 Routine trainiert (83 s)
+08:44:41 seed 504 Vorwärtsmodell fertig (2 s)
+08:44:44 seed 504 Prämisse nicht erfüllt (Invarianz 0.946, Restanteil -0.035, Verschiebung 0.081)
+08:49:41 seed 502 Vor-Öffnen M3-A: bit25&a3, bit23&a2, bit17&a0
+08:49:41 seed 502 Vor-Öffnen S1-B: Farbe 2
+08:49:43 seed 500 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit17&a0
+08:49:43 seed 500 Vor-Öffnen S1-B: Farbe 2
+08:49:44 seed 502 Vor-Öffnen S1-A: bit141&a2, bit242&a2, bit219&a2, bit169&a2, bit17&a2, bit178&a3
+08:49:46 seed 500 Vor-Öffnen S1-A: bit202&a2, bit125&a2, bit219&a2, bit122&a2
+08:49:53 seed 502 Null-Ströme und Schwellen fertig (8 s)
+08:49:54 seed 500 Null-Ströme und Schwellen fertig (8 s)
+08:50:03 seed 502 δ M3-B = 0.001097
+08:50:03 seed 500 δ M3-B = 0.0004665
+09:13:33 seed 500 δ M3-A = 0.01724
+09:13:33 seed 500 Phase 1 fertig (1899 s)
+09:15:30 seed 502 δ M3-A = 0.01412
+09:15:30 seed 502 Phase 1 fertig (2016 s)
+09:15:33 seed 500 Bedingung red gestartet
+09:15:33 seed 500 Bedingung none gestartet
+09:15:33 seed 500 Bedingung global gestartet
+09:15:33 seed 500 Bedingung walls gestartet
+09:15:34 seed 500 Bedingung none fertig (1 s)
+09:15:34 seed 502 Bedingung none gestartet
+09:15:34 seed 500 Bedingung walls fertig (1 s)
+09:15:34 seed 502 Bedingung red gestartet
+09:15:34 seed 502 Bedingung none fertig (1 s)
+09:15:35 seed 502 Bedingung global gestartet
+09:30:18 seed 500 Bedingung red fertig (885 s)
+09:30:18 seed 502 Bedingung walls gestartet
+09:30:23 seed 502 Bedingung red fertig (889 s)
+09:42:55 seed 502 Bedingung walls fertig (757 s)
+09:58:03 seed 500 Bedingung global fertig (2550 s)
+10:01:13 seed 502 Bedingung global fertig (2738 s)
