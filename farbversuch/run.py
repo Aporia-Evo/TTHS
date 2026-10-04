@@ -140,6 +140,7 @@ def _pre_open_practice(seed: int, cfg: Config, forward: ForwardModel, Z: np.ndar
             n_perm = cfg.n_perm if arm == "B" else cfg.n_perm_A
             practice[name] = pre_open_s1(S, F[arm], rng(seed, PREOPEN, i, 0), n_perm, alpha=cfg.alpha,
                                          max_open=cfg.max_pre_open, chunk=cfg.perm_chunk)
+        _log(f"seed {seed} Vor-Öffnen {name}: {', '.join(candidate_name(arm, c) for c in practice[name]) or 'keine'}")
     return practice
 
 
@@ -155,6 +156,7 @@ def _calibrate_deltas(seed: int, cfg: Config, routine: Routine, null_buffers: Se
                        for obs, actions, disps in null_buffers]
             deltas[name] = calibrate_delta(buffers, practice[name], lambda j, i=i: rng(seed, DELTA, i, j),
                                            cfg.max_null_alarms, **_fit_kw(cfg))
+            _log(f"seed {seed} δ {name} = {deltas[name]:.4g}")
     return deltas
 
 
@@ -163,7 +165,9 @@ def train_phase1(seed: int, cfg: Config) -> Phase1:
     t0 = time.perf_counter()
     X, A = teacher_data(seed, cfg)
     routine = train_routine(X, A, rng(seed, INIT), cfg.k, cfg.lr, cfg.epochs, cfg.wd, cfg.init_std)
+    _log(f"seed {seed} Routine trainiert ({time.perf_counter() - t0:.0f} s)")
 
+    t1 = time.perf_counter()
     runs = routine_rollouts(routine, seed, FORWARD, cfg.n_forward_episodes, cfg, p_slip=cfg.p_slip)
     X, A, D = _stack(runs)
     episodes = np.concatenate([np.full(len(t.actions), e) for e, (_, t) in enumerate(runs)])
@@ -172,6 +176,7 @@ def train_phase1(seed: int, cfg: Config) -> Phase1:
     class_counts = np.bincount(D, minlength=N_DISP)
 
     p_obs, p_actions, p_disps, p_episodes = _tail(cfg.buffer_size, "Übungspuffer (Vorwärtsdaten)", X, A, D, episodes)
+    _log(f"seed {seed} Vorwärtsmodell fertig ({time.perf_counter() - t1:.0f} s)")
     return Phase1(routine=routine, forward=forward, class_counts=class_counts, practice_obs=p_obs,
                   practice_actions=p_actions, practice_disps=p_disps, practice_episodes=p_episodes,
                   sec=time.perf_counter() - t0)
@@ -185,6 +190,7 @@ def calibrate_phase1(seed: int, cfg: Config, p1: Phase1) -> Phase1:
     practice = _pre_open_practice(seed, cfg, forward, routine.encode(p1.practice_obs), p1.practice_obs,
                                   p1.practice_actions, p1.practice_disps)
 
+    t1 = time.perf_counter()
     null_streams, null_buffers = [], []
     for j in range(cfg.n_null_streams):
         runs = routine_rollouts(routine, seed, NULL, cfg.n_null_episodes, cfg, p_slip=cfg.p_slip, stream=j)
@@ -193,6 +199,7 @@ def calibrate_phase1(seed: int, cfg: Config, p1: Phase1) -> Phase1:
     m3_threshold = calibrate_m3(null_streams, window=cfg.notice_window, interval=cfg.check_interval,
                                 max_alarms=cfg.max_null_alarms)
     cusum_k, cusum_h = calibrate_cusum(null_streams, sd_factor=cfg.cusum_sd_factor, max_alarms=cfg.max_null_alarms)
+    _log(f"seed {seed} Null-Ströme und Schwellen fertig ({time.perf_counter() - t1:.0f} s)")
     deltas = _calibrate_deltas(seed, cfg, routine, null_buffers, practice)
     return replace(p1, m3_threshold=m3_threshold, cusum_k=cusum_k, cusum_h=cusum_h, practice=practice, deltas=deltas,
                    sec=p1.sec + time.perf_counter() - t0)
@@ -379,11 +386,12 @@ def prepare_seed(seed: int, cfg: Config) -> Prepared:
     _log(f"seed {seed} gestartet")
     p1 = train_phase1(seed, cfg)
     premise = premise_checks(seed, cfg, p1)
+    _log(f"seed {seed} Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'} (Invarianz {premise['color_invariance']:.3f}, "
+         f"Restanteil {premise['restanteil']:.3f}, Verschiebung {premise['shift']:.3f})")
     p_global = None
     if premise["ok"]:
         p1 = calibrate_phase1(seed, cfg, p1)
-    _log(f"seed {seed} Phase 1 fertig ({p1.sec:.0f} s), Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'}")
-    if premise["ok"]:
+        _log(f"seed {seed} Phase 1 fertig ({p1.sec:.0f} s)")
         p_global = find_p_global(seed, cfg, p1)
     return Prepared(seed=int(seed), config=cfg.as_dict(), fingerprint=fingerprint(), p1=p1, premise=premise,
                     p_global=p_global, sec=time.perf_counter() - t0)
@@ -412,6 +420,7 @@ def result_json(prep: Prepared, conditions: dict | None, cond_sec: dict[str, flo
 
 
 def _deploy_timed(prep: Prepared, cfg: Config, condition: str) -> tuple[dict, float]:
+    _log(f"seed {prep.seed} Bedingung {condition} gestartet")
     t0 = time.perf_counter()
     result = deploy(prep.seed, cfg, prep.p1, prep.p_global["p_global"], condition)
     return result, time.perf_counter() - t0

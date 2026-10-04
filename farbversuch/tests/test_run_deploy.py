@@ -232,7 +232,8 @@ def test_premise_failure_stops_seed(capsys):
     assert r["practice"] is None and r["delta"] is None and r["calibration"] is None
     assert json.loads(json.dumps(r, allow_nan=False)) == r
     lines = capsys.readouterr().err.splitlines()
-    assert len(lines) == 2 and "Prämisse nicht erfüllt" in lines[1]          # keine Bedingungszeilen
+    assert len(lines) == 4 and "Routine trainiert" in lines[1] and "Vorwärtsmodell fertig" in lines[2]
+    assert "Prämisse nicht erfüllt (Invarianz" in lines[3]                     # kein Vor-Öffnen, keine Bedingungen
 
 
 @pytest.mark.slow
@@ -263,11 +264,17 @@ def test_run_seed_logs_progress_to_stderr(capsys):
     cap = capsys.readouterr()
     lines = cap.err.splitlines()
     assert cap.out == "" and all(re.match(r"\d\d:\d\d:\d\d seed 3 ", ln) for ln in lines)
-    assert len(lines) == 2 + len(CONDITIONS)
-    assert "gestartet" in lines[0]
-    assert "Phase 1 fertig" in lines[1] and "Prämisse ok" in lines[1]
-    for cond, ln in zip(CONDITIONS, lines[2:]):
-        assert re.search(rf"Bedingung {cond} fertig \(\d+ s", ln)
+    practice = {name: ", ".join(c["name"] for c in cands) or "keine" for name, cands in r["practice"].items()}
+    expected = (["gestartet$", r"Routine trainiert \(\d+ s\)$", r"Vorwärtsmodell fertig \(\d+ s\)$",
+                 r"Prämisse ok \(Invarianz \d\.\d{3}, Restanteil -?\d\.\d{3}, Verschiebung \d\.\d{3}\)$"]
+                + [f"Vor-Öffnen {re.escape(n)}: {re.escape(practice[n])}$" for n in TINY.systems]
+                + [r"Null-Ströme und Schwellen fertig \(\d+ s\)$"]
+                + [rf"δ {n} = {re.escape(f'{d:.4g}')}$" for n, d in r["delta"].items()]
+                + [r"Phase 1 fertig \(\d+ s\)$"]
+                + [p for c in CONDITIONS for p in (f"Bedingung {c} gestartet$", rf"Bedingung {c} fertig \(\d+ s")])
+    assert len(lines) == len(expected)
+    for pattern, ln in zip(expected, lines):
+        assert re.search(rf"seed 3 {pattern}", ln), (pattern, ln)
     assert set(r["conditions"]) == set(CONDITIONS)                            # Ergebnis unverändert
 
 
@@ -452,7 +459,8 @@ def test_prepare_job_recomputes_a_pickle_without_a_fingerprint(tmp_path, monkeyp
 
 def test_prepare_seed_stores_the_current_fingerprint(monkeypatch):
     monkeypatch.setattr(run, "train_phase1", lambda seed, cfg: SimpleNamespace(sec=1.))
-    monkeypatch.setattr(run, "premise_checks", lambda seed, cfg, p1: {"ok": False})
+    monkeypatch.setattr(run, "premise_checks", lambda seed, cfg, p1: {
+        "ok": False, "color_invariance": .5, "fwd_surprise": 1., "freq_surprise": 2., "restanteil": .1, "shift": .1})
     assert prepare_seed(0, TINY).fingerprint == run.fingerprint()
 
 
