@@ -195,3 +195,18 @@ def test_cli_write_default_config(tmp_path, monkeypatch):
     monkeypatch.setattr("farbversuch.freeze.REPO_ROOT", root)
     main(["write"])
     assert Config.from_json(root / "farbversuch" / "frozen_config.json") == Config()
+
+
+@pytest.mark.parametrize("remove_config", [False, True])
+def test_verify_requires_the_frozen_config_in_the_manifest(tmp_path, remove_config):
+    root = tree(tmp_path)
+    write_freeze(root, Config())
+    sums = root / SUMS
+    sums.write_text("".join(line for line in sums.read_text().splitlines(keepends=True)
+                            if not line.rstrip().endswith("farbversuch/frozen_config.json")))
+    config = root / "farbversuch/frozen_config.json"
+    if remove_config:
+        config.unlink()
+    else:
+        Config(epochs=7).to_json(config)
+    assert "farbversuch/frozen_config.json" in verify_freeze(root)

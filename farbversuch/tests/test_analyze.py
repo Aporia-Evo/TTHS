@@ -874,3 +874,53 @@ def test_other_seed_sets_do_not_check_the_freeze(tmp_path, monkeypatch, capsys):
     main(["--results", str(tmp_path), "--seeds", "500-504", "--confirm"])
     main(["--results", str(tmp_path), "--seeds", "500-503"])
     assert "WARNUNG" not in capsys.readouterr().out
+
+
+# --- Review 04.10.2026 (Merge 436c621): Prämisse aus Messwerten, nicht nur aus dem ok-Flag ---
+
+@pytest.mark.parametrize("field,value", [
+    ("restanteil", None), ("restanteil", float("nan")), ("restanteil", float("inf")),
+    ("restanteil", .151), ("restanteil", "0.05"), ("restanteil", True),
+    ("shift", None), ("shift", float("nan")), ("shift", float("inf")), ("shift", .251),
+    ("color_invariance", .949), ("fwd_surprise", 1.5), ("freq_surprise", None),
+])
+def test_unverified_premise_never_counts_as_success(field, value):
+    rs = [fake_result(s) for s in MAIN_SEEDS]
+    rs[0]["premise"][field] = value                  # gespeichertes ok=True ist veraltet oder widersprüchlich
+    ev = evaluate(rs, MAIN_SEEDS)
+    assert ev["P1"]["failed_seeds"] == [400]
+    assert ev["P2"]["count"] == ev["P3"]["count"] == 9
+    assert not ev["seeds"][0]["premise_ok"]
+    assert ev["seeds"][0]["usability"] is None
+    # Bestätigung: mindestens 5 Seeds ab 500 (M4); per_seed hat "all", entscheidend ist die gemeinsame Zählung (D1)
+    conf_seeds = list(range(500, 505))
+    conf = [fake_result(s) for s in conf_seeds]
+    conf[0]["premise"][field] = value
+    confirmation = evaluate_confirmation(conf, conf_seeds)
+    assert confirmation["per_seed"][500] == {"premise": False, "no_false_open": False, "red_correct": False,
+                                             "all": False}
+    assert confirmation["premise"]["count"] == confirmation["joint"]["count"] == 4
+    conf[1]["premise"][field] = value                # zwei solche Seeds: gemeinsam nur 3/5, nicht bestätigt
+    assert not evaluate_confirmation(conf, conf_seeds)["confirmed"]
+
+
+def test_legacy_results_cannot_confirm_v2_without_p1b_measurements():
+    seeds = list(range(500, 505))
+    ev = evaluate_confirmation([legacy_result(s) for s in seeds], seeds)
+    assert not ev["confirmed"] and ev["premise"]["count"] == 0 and ev["joint"]["count"] == 0
+    main_ev = evaluate([legacy_result(s) for s in MAIN_SEEDS], MAIN_SEEDS)
+    assert main_ev["P1"]["failed_seeds"] == list(MAIN_SEEDS)
+    assert main_ev["P2"]["count"] == 0 and main_ev["abort"]["triggered"]
+
+
+def test_premise_validation_uses_recorded_config_and_inclusive_limits():
+    seeds = list(range(500, 505))                    # M4: mindestens 5 Seeds ab 500, gleiche Konfiguration
+    rs = [fake_result(s) for s in seeds]
+    for r in rs:
+        r["config"].update(min_invariance=.9, max_restanteil=.2, max_shift=.3)
+        r["premise"].update(color_invariance=.9, restanteil=.2, shift=.3)
+    assert evaluate_confirmation(rs, seeds)["confirmed"]
+    for r in rs[:2]:
+        r["premise"]["ok"] = False                   # ein negatives Flag bleibt negativ; D1: gemeinsam 3/5
+    ev = evaluate_confirmation(rs, seeds)
+    assert not ev["confirmed"] and ev["per_seed"][500]["premise"] is False and ev["joint"]["count"] == 3

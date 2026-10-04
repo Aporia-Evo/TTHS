@@ -526,8 +526,11 @@ def _prepare_job(task: tuple[int, Config, str]) -> tuple[int, bool]:
     work = Path(out) / ".work"
     work.mkdir(parents=True, exist_ok=True)
     path = work / f"seed_{seed}.prep.pkl"
+    # unlesbar -> None (_load_work); lesbar, aber fremd oder unvollständig -> ebenfalls neu berechnen
     prep = _load_work(path, lambda p: pickle.loads(p.read_bytes()))
-    if getattr(prep, "config", None) == cfg.as_dict() and getattr(prep, "fingerprint", None) == fingerprint():
+    if (isinstance(prep, Prepared) and getattr(prep, "seed", None) == seed
+            and getattr(prep, "config", None) == cfg.as_dict()
+            and getattr(prep, "fingerprint", None) == fingerprint()):
         _log(f"seed {seed} Vorbereitung übernommen")
     else:
         prep = prepare_seed(seed, cfg)
@@ -542,8 +545,9 @@ def _deploy_job(task: tuple[int, Config, str, str]) -> tuple[int, str]:
     work = Path(out) / ".work"
     path = work / f"seed_{seed}.{condition}.json"
     origin = fingerprint()
-    stored = _load_work(path, _json_object) or {}
-    if stored.get("config") == cfg.as_dict() and stored.get("fingerprint") == origin:
+    stored = _load_work(path, _json_object) or {}                 # unlesbar oder kein JSON-Objekt -> {}
+    if (stored.get("config") == cfg.as_dict() and stored.get("fingerprint") == origin
+            and {"result", "sec"} <= stored.keys()):
         _log(f"seed {seed} Bedingung {condition} übernommen")
     else:
         result, sec = _deploy_timed(_load_prep(work, seed), cfg, condition)

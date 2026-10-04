@@ -90,12 +90,13 @@ def m3_trace(episodes: Sequence[np.ndarray], window: int = 500, interval: int = 
     """(E, Mittel der letzten `window` Überraschungen) nach jeder `interval`-ten Episode mit >= window Schritten."""
     ends = np.cumsum([len(e) for e in episodes])
     steps = np.concatenate(episodes) if len(episodes) else np.zeros(0)
-    csum = np.concatenate([[0.], np.cumsum(steps)])
     trace = []
     for E in range(interval, len(episodes) + 1, interval):
         n = int(ends[E - 1])
         if n >= window:
-            trace.append((E, float((csum[n] - csum[n - window]) / window)))
+            # Dieselbe Reduktion wie im Monitor: kumulative Summen können die
+            # Schwelle abrunden und bei identischen Daten einen Alarm erzeugen.
+            trace.append((E, float(np.mean(steps[n - window:n]))))
     return trace
 
 
