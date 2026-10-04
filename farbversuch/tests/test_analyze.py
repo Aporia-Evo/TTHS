@@ -378,11 +378,13 @@ def test_main_marks_a_partial_evaluation_as_explorative(tmp_path, capsys):
 # --- Task 8: Auswertung v2 und Bestätigung ---
 
 def test_confirmation_counts_and_need():
+    # Kriterien je 5/4/4, aber nur 3 Seeds erfüllen alle drei zugleich: nicht bestätigt (Entscheidung D1, 04.10.2026)
     seeds = list(range(500, 505))
     rs = [fake_result(s, red_ok=s != 500, global_open=s == 501) for s in seeds]
     ev = evaluate_confirmation(rs, seeds)
     assert ev["need"] == 4 and ev["red_correct"] == {"count": 4, "fulfilled": True}
-    assert ev["no_false_open"]["count"] == 4 and ev["confirmed"]
+    assert ev["no_false_open"]["count"] == 4
+    assert ev["joint"] == {"count": 3, "need": 4, "fulfilled": False} and not ev["confirmed"]
 
 
 def test_confirmation_rejects_main_seeds_and_duplicates():
@@ -417,26 +419,72 @@ def test_confirmation_need_is_ceil_of_four_fifths(n, need):
     assert ev["n"] == n and ev["need"] == need
 
 
-def test_each_criterion_is_checked_separately():
-    # Seed 500 verfehlt nur Kriterium 2, Seed 501 nur Kriterium 3: jedes Kriterium hat 4/5, obwohl nur 3 Seeds alle erfüllen
+def test_per_criterion_four_of_five_but_joint_three_is_not_confirmed():
+    # Seed 500 verfehlt nur Kriterium 2, Seed 501 nur Kriterium 3: jedes Kriterium hat 4/5, aber nur 3 Seeds erfüllen
+    # alle drei zugleich; entscheidend ist die gemeinsame Zählung (Entscheidung D1 des Nutzers, 04.10.2026)
     seeds = list(range(500, 505))
     rs = [fake_result(500, global_open=True), fake_result(501, red_ok=False)] + [fake_result(s) for s in (502, 503, 504)]
     ev = evaluate_confirmation(rs, seeds)
     assert (ev["premise"]["count"], ev["no_false_open"]["count"], ev["red_correct"]["count"]) == (5, 4, 4)
-    assert ev["confirmed"]
-    # fällt ein Kriterium unter 4, ist die Methode nicht bestätigt, egal wie gut die anderen sind
+    assert ev["premise"]["fulfilled"] and ev["no_false_open"]["fulfilled"] and ev["red_correct"]["fulfilled"]
+    assert ev["joint"] == {"count": 3, "need": 4, "fulfilled": False} and ev["confirmed"] is False
+    assert [row["all"] for row in ev["per_seed"].values()] == [False, False, True, True, True]
+
+
+def test_joint_four_of_five_is_confirmed():
+    # ein einziger Seed verfehlt zwei Kriterien zugleich: 4/5 gemeinsam genügt
+    seeds = list(range(500, 505))
+    rs = [fake_result(500, global_open=True, red_ok=False)] + [fake_result(s) for s in (501, 502, 503, 504)]
+    ev = evaluate_confirmation(rs, seeds)
+    assert (ev["premise"]["count"], ev["no_false_open"]["count"], ev["red_correct"]["count"]) == (5, 4, 4)
+    assert ev["joint"] == {"count": 4, "need": 4, "fulfilled": True} and ev["confirmed"] is True
+    assert ev["per_seed"][500] == {"premise": True, "no_false_open": False, "red_correct": False, "all": False}
+    assert all(ev["per_seed"][s]["all"] for s in (501, 502, 503, 504))
+
+
+def test_confirmed_depends_on_the_joint_count_alone():
+    # ein Kriterium unter 4 heißt auch gemeinsam unter 4; umgekehrt entscheidet nie ein Einzelkriterium
+    seeds = list(range(500, 505))
     rs = [fake_result(500, global_open=True), fake_result(501, global_open=True)] + [fake_result(s) for s in (502, 503, 504)]
     ev = evaluate_confirmation(rs, seeds)
     assert (ev["premise"]["count"], ev["no_false_open"]["count"], ev["red_correct"]["count"]) == (5, 3, 5)
     assert ev["premise"]["fulfilled"] and ev["red_correct"]["fulfilled"] and not ev["no_false_open"]["fulfilled"]
-    assert not ev["confirmed"]
+    assert ev["joint"] == {"count": 3, "need": 4, "fulfilled": False} and not ev["confirmed"]
+    all_ok = evaluate_confirmation([fake_result(s) for s in seeds], seeds)
+    assert all_ok["joint"] == {"count": 5, "need": 4, "fulfilled": True} and all_ok["confirmed"]
+
+
+def test_confirmation_criteria_two_and_three_look_only_at_m3b():
+    seeds = list(range(500, 505))
+    others = [n for n in SYSTEMS if n != "M3-B"]
+
+    def counts(rs):
+        ev = evaluate_confirmation(rs, seeds)
+        return ev["no_false_open"]["count"], ev["red_correct"]["count"], ev["joint"]["count"]
+
+    base = [fake_result(s, red_ok=s != 500, global_open=s == 501) for s in seeds]
+    expected = counts(base)
+    assert expected == (4, 4, 3)
+    noisy = [fake_result(s, red_ok=s != 500, global_open=s == 501) for s in seeds]
+    for r in noisy:
+        for name in others:
+            arm_red = C_SPECIAL if name.endswith("B") else A_RED
+            for cond in ("none", "global"):
+                sys_variant(r, name, cond, sysres(110, [(4, 120), (1, 130)]))          # andere öffnen fälschlich
+            sys_variant(r, name, "red", sysres(110, [(arm_red, 120)]))                 # andere treffen in red
+    assert counts(noisy) == expected
+    quiet = [fake_result(s, red_ok=s != 500, global_open=s == 501) for s in seeds]
+    for r in quiet:
+        for name in others:
+            sys_variant(r, name, "red", sysres(110, [(4, 120)]))                       # andere verfehlen red
+    assert counts(quiet) == expected
 
 
 def test_failed_premise_seed_is_not_fulfilled_for_criteria_two_and_three():
     seeds = list(range(500, 505))
     ev = evaluate_confirmation([fake_result(s, ok=s != 500) for s in seeds], seeds)
     assert ev["premise"]["count"] == 4 and ev["no_false_open"]["count"] == 4 and ev["red_correct"]["count"] == 4
-    assert ev["confirmed"]                                       # 4 von 5 genügt
+    assert ev["joint"]["count"] == 4 and ev["confirmed"]         # 4 von 5 genügt
     ev = evaluate_confirmation([fake_result(s, ok=s > 501) for s in seeds], seeds)
     assert ev["no_false_open"]["count"] == 3 and ev["red_correct"]["count"] == 3
     # die Prämisse entscheidet, nicht das Vorhandensein von Bedingungen: ok=False mit sonst makellosen Strömen
@@ -499,22 +547,38 @@ def test_confirmation_error_cases():
         evaluate_confirmation([], [])
 
 
-def test_confirmation_markdown_shows_three_criteria_counts_and_verdicts():
+def criteria_rows(md):
+    lines = md.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("| Kriterium |"))
+    rows = []
+    for ln in lines[start + 2:]:
+        if not ln.startswith("|"):
+            break
+        rows.append([c.strip() for c in ln.strip("|").split("|")])
+    return rows
+
+
+def test_confirmation_markdown_leads_with_the_joint_row_and_marks_the_others_as_information():
     seeds = list(range(500, 505))
     md = confirmation_markdown(evaluate_confirmation(
         [fake_result(s, red_ok=s != 500, global_open=s == 501) for s in seeds], seeds))
     assert md.splitlines()[0] == "## Bestätigung (Spec v2 §8)"
-    crit = [[c.strip() for c in ln.strip("|").split("|")] for ln in md.splitlines() if ln[:3] in ("| 1", "| 2", "| 3")]
-    assert [c[0][0] for c in crit] == ["1", "2", "3"]
+    joint, *crit = criteria_rows(md)
+    assert "alle drei" in joint[0].lower() and "entscheidend" in joint[0]
+    assert joint[1:] == ["3/5", "≥ 4", "nicht erfüllt"]                  # 5/4/4 je Kriterium, gemeinsam nur 3
+    assert [c[0][0] for c in crit] == ["1", "2", "3"] and all("zur Information" in c[0] for c in crit)
     assert "Prämissen" in crit[0][0] and "`none`" in crit[1][0] and "`global`" in crit[1][0] and "`red`" in crit[2][0]
-    assert [c[1:] for c in crit] == [["5/5", "≥ 4", "erfüllt"], ["4/5", "≥ 4", "erfüllt"], ["4/5", "≥ 4", "erfüllt"]]
-    assert md.rstrip().endswith("Bestätigt.")
-    assert "| 500 | ja | ja | nein |" in md and "| 501 | ja | nein | ja |" in md       # welche Seeds fehlen
+    assert [c[1] for c in crit] == ["5/5", "4/5", "4/5"]
+    assert all("erfüllt" not in cell for c in crit for cell in c[1:])     # kein Urteil aus einem Einzelkriterium
+    assert "gleichzeitig" in md and "Nicht bestätigt" in md
+    assert md.rstrip().endswith("eine weitere Runde läuft nur auf neuen Seeds.")
+    assert "| 500 | ja | ja | nein | nein |" in md and "| 501 | ja | nein | ja | nein |" in md   # welche Seeds fehlen
+    assert "| 502 | ja | ja | ja | ja |" in md
+    md = confirmation_markdown(evaluate_confirmation([fake_result(s) for s in seeds], seeds))
+    assert criteria_rows(md)[0][1:] == ["5/5", "≥ 4", "erfüllt"] and md.rstrip().endswith("Bestätigt.")
     md = confirmation_markdown(evaluate_confirmation([fake_result(s, ok=s > 501) for s in seeds], seeds))
-    crit = [[c.strip() for c in ln.strip("|").split("|")] for ln in md.splitlines() if ln[:3] in ("| 1", "| 2", "| 3")]
-    assert [c[1:] for c in crit] == [["3/5", "≥ 4", "nicht erfüllt"]] * 3
-    assert "| 500 | nein | nein | nein |" in md and md.rstrip().endswith("eine weitere Runde läuft nur auf neuen Seeds.")
-    assert "Nicht bestätigt" in md
+    assert criteria_rows(md)[0][1:] == ["3/5", "≥ 4", "nicht erfüllt"]
+    assert "| 500 | nein | nein | nein | nein |" in md and "Nicht bestätigt" in md
 
 
 def test_main_confirm_appends_section(tmp_path, capsys):

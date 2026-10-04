@@ -184,9 +184,14 @@ def _check_confirmation_seeds(seeds: Sequence[int]) -> None:
                          f"verwendet: {used}")
 
 
+CONFIRMATION_CRITERIA = ("premise", "no_false_open", "red_correct")
+
+
 def evaluate_confirmation(results: Sequence[dict], seeds: Sequence[int]) -> dict:
-    """Bestätigung (Spec v2 §8, Festlegung 8): jedes der drei Kriterien einzeln in mindestens ⌈0,8·n⌉ Seeds.
-    Ein Seed mit gescheiterter Prämisse erfüllt auch Kriterium 2 und 3 nicht. Seeds des Hauptlaufs sind ein Fehler."""
+    """Bestätigung (Spec v2 §8, Präzisierung des Nutzers vom 04.10.2026): ein Seed zählt nur, wenn alle drei Kriterien
+    zugleich gelten; bestätigt, wenn das in mindestens ⌈0,8·n⌉ Seeds so ist ("joint"). Die Zählungen je Kriterium
+    stehen zur Information daneben und entscheiden nichts. Ein Seed mit gescheiterter Prämisse erfüllt auch Kriterium 2
+    und 3 nicht. Seeds des Hauptlaufs sind ein Fehler."""
     _check_confirmation_seeds(seeds)
     rs = _select(results, seeds)
     n = len(rs)
@@ -196,15 +201,17 @@ def evaluate_confirmation(results: Sequence[dict], seeds: Sequence[int]) -> dict
         ok = bool(r["premise"]["ok"])
         # geöffnet = nur Wiederöffnungen; die Übungs-Ontologie steht nicht in "opened"
         quiet = ok and all(not r["conditions"][c]["M3-B"]["opened"] for c in ("none", "global"))
-        per_seed[r["seed"]] = {"premise": ok, "no_false_open": quiet, "red_correct": ok and bool(_m3b_red(r)["correct"])}
+        row = {"premise": ok, "no_false_open": quiet, "red_correct": ok and bool(_m3b_red(r)["correct"])}
+        per_seed[r["seed"]] = {**row, "all": all(row.values())}
 
     def criterion(key: str) -> dict:
         count = sum(row[key] for row in per_seed.values())
         return {"count": count, "fulfilled": count >= need}
 
-    crit = {key: criterion(key) for key in ("premise", "no_false_open", "red_correct")}
-    return {"n": n, "need": need, **crit, "confirmed": all(c["fulfilled"] for c in crit.values()),
-            "per_seed": per_seed}
+    crit = {key: criterion(key) for key in CONFIRMATION_CRITERIA}
+    joint_count = sum(row["all"] for row in per_seed.values())
+    joint = {"count": joint_count, "need": need, "fulfilled": joint_count >= need}
+    return {"n": n, "need": need, **crit, "joint": joint, "confirmed": joint["fulfilled"], "per_seed": per_seed}
 
 
 def _f(x, nd: int = 1) -> str:
@@ -314,20 +321,22 @@ def report_markdown(ev: dict) -> str:
 
 def confirmation_markdown(ev: dict) -> str:
     """Abschnitt „Bestätigung“ aus dem Ergebnis von evaluate_confirmation."""
-    n, need = ev["n"], ev["need"]
+    n, need, joint = ev["n"], ev["need"], ev["joint"]
     seeds = ", ".join(str(s) for s in ev["per_seed"])
     out = ["## Bestätigung (Spec v2 §8)", "",
-           f"Seeds {seeds} (n = {n}), explorativ ausgewertet. Die Methode gilt als bestätigt, wenn jedes der drei "
-           f"Kriterien in mindestens {need} von {n} Seeds gilt; ein Seed mit gescheiterter Prämisse zählt bei den "
-           f"Kriterien 2 und 3 als nicht erfüllt.", ""]
+           f"Seeds {seeds} (n = {n}), explorativ ausgewertet. Die Methode gilt als bestätigt, wenn in mindestens "
+           f"{need} von {n} Seeds alle drei Kriterien gleichzeitig gelten (Präzisierung, Entscheidung des Nutzers vom "
+           f"04.10.2026). Ein Seed mit gescheiterter Prämisse zählt bei den Kriterien 2 und 3 als nicht erfüllt. "
+           f"Die Zählungen je Kriterium stehen nur zur Information da.", ""]
     labels = [("premise", "1 Prämissen P1 und P1b erfüllt"),
               ("no_false_open", "2 M3-B öffnet bei `none` und `global` nichts über die Übungs-Ontologie hinaus"),
               ("red_correct", "3 M3-B öffnet bei `red` „Farbe 0“ nach dem Wechsel")]
     out += _table(["Kriterium", "Seeds", "Benötigt", "Ergebnis"],
-                  [[label, f"{ev[key]['count']}/{n}", f"≥ {need}", _verdict(ev[key]["fulfilled"])]
-                   for key, label in labels])
-    out += _table(["Seed", "Kriterium 1", "Kriterium 2", "Kriterium 3"],
-                  [[str(seed)] + ["ja" if row[key] else "nein" for key, _ in labels]
+                  [["**Alle drei Kriterien gleichzeitig (entscheidend)**", f"{joint['count']}/{n}", f"≥ {need}",
+                    _verdict(joint["fulfilled"])]]
+                  + [[f"{label} (zur Information)", f"{ev[key]['count']}/{n}", "–", "–"] for key, label in labels])
+    out += _table(["Seed", "Kriterium 1", "Kriterium 2", "Kriterium 3", "Alle drei"],
+                  [[str(seed)] + ["ja" if row[key] else "nein" for key in (*CONFIRMATION_CRITERIA, "all")]
                    for seed, row in ev["per_seed"].items()])
     out.append("Bestätigt." if ev["confirmed"] else
                "Nicht bestätigt: Ergebnis zurück an den Nutzer; eine weitere Runde läuft nur auf neuen Seeds.")

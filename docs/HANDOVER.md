@@ -118,7 +118,7 @@ python -m farbversuch.run --config farbversuch/pilot_config.json --seeds 500-504
 python -m farbversuch.analyze --results farbversuch/results/confirm --seeds 500-504 --confirm > farbversuch/results/confirm_report.md
 ```
 
-- Die Methode gilt als bestätigt, wenn **jedes** der drei Kriterien in mindestens 4 von 5 Seeds gilt: (1) P1 und P1b erfüllt, (2) M3-B öffnet bei `none` und `global` nichts über die Übungs-Ontologie hinaus, (3) M3-B öffnet bei `red` „Farbe 0“ nach dem Wechsel. Ein Seed mit gescheiterter Prämisse zählt bei (2) und (3) als nicht erfüllt.
+- Die Methode gilt als bestätigt, wenn es mindestens 4 von 5 Seeds gibt, in denen **alle drei** Kriterien **gleichzeitig** gelten: (1) P1 und P1b erfüllt, (2) M3-B öffnet bei `none` und `global` nichts über die Übungs-Ontologie hinaus, (3) M3-B öffnet bei `red` „Farbe 0“ nach dem Wechsel. Ein Seed mit gescheiterter Prämisse zählt bei (2) und (3) als nicht erfüllt. Entscheidend ist im Bericht die Zeile „Alle drei Kriterien gleichzeitig“; die Zählungen je Kriterium stehen dort nur zur Information (Präzisierung der Spec v2 §8, Entscheidung des Nutzers vom 04.10.2026).
 - `analyze --confirm` weist Seeds aus 400–409 ab. Das ist Absicht: Hauptlauf-Seeds dürfen nicht zur Bestätigung dienen.
 - Pilot und Bestätigung laufen jeweils komplett auf derselben Maschine. `analyze` verlangt über alle Seeds gleiche Konfiguration und gleiche Umgebung und bricht sonst ab.
 - Ist die Bestätigung gestartet, bleibt `pilot_config.json` unverändert, und die Seeds 500–504 laufen nicht mit einer anderen Konfiguration neu: Mit dem Start sind sie verbraucht.
@@ -231,7 +231,7 @@ Füge gezielt hinzu: farbversuch/pilot_config.json, farbversuch/PROTOKOLL.md (fa
 
 Schritt 6: Bericht an mich
 - Pilot: Werte wie in Schritt 2, Änderungen an der Konfiguration (mit Verweis auf PROTOKOLL.md).
-- Bestätigung: die Tabelle „Bestätigung“ aus confirm_report.md (drei Kriterien, Seeds, benötigt, Ergebnis), die Kriterien je Seed, P1/P1b-Werte, Übungs-Ontologien und δ je Seed, bei `red` die Nutzbarkeit.
+- Bestätigung: die Tabelle „Bestätigung“ aus confirm_report.md (entscheidend ist die Zeile „Alle drei Kriterien gleichzeitig“, die drei Kriterien stehen zur Information darunter), die Kriterien je Seed, P1/P1b-Werte, Übungs-Ontologien und δ je Seed, bei `red` die Nutzbarkeit.
 - Laufzeiten: Kernzahl, --jobs, Gesamtwandzeit (aus `date`), aus dem Log die Zeitstempel je Seed für „gestartet“, „Phase 1 fertig“ und „Bedingung … fertig“, dazu phase1_sec und total_sec je Seed.
 - Getrennt: Beobachtet (Zahlen) und Deutung (ausdrücklich als Annahme).
 - Auffälligkeiten: Warnungen, Abbrüche, p_global mit bracketed = false, Seeds mit gescheiterter Prämisse.

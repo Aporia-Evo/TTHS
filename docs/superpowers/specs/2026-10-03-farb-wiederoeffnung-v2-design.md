@@ -1,6 +1,6 @@
 # Spezifikation v2: Wiederöffnen einer ignorierten Dimension („Farbversuch“)
 
-Stand: 03.10.2026 · Status: Entwurf zur Freigabe · Umsetzung: Claude Code
+Stand: 03.10.2026, §8 präzisiert am 04.10.2026 · Status: Entwurf zur Freigabe · Umsetzung: Claude Code
 Ersetzt: `docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-design.md` (v1). Änderungen gegenüber v1 und ihre Gründe stehen in Anhang A.
 
 Diese Spezifikation ist eigenständig. Sie setzt den Code der v1-Umsetzung als Ausgangspunkt voraus und beschreibt den Zielzustand.
@@ -135,10 +135,11 @@ Urteile zu P2–P5 und zum Abbruch werden nur für genau die Seeds 400–409 aus
 ## 8. Pilot, Bestätigung und Einfrieren
 
 1. **Pilot auf Seed 0:** Fehlersuche und Erfüllung von P1/P1b. Anpassen dürfen sich nur: Trainings-Hyperparameter der Routine und des Vorwärtsmodells, Puffergröße, Prüfintervall. Jede Änderung mit Grund im Protokoll.
-2. **Bestätigung auf Seeds 500–504 (neu):** volle Pipeline mit der Pilot-Konfiguration, explorativ ausgewertet. Vorab festgelegt gilt die Methode als bestätigt, wenn in **mindestens 4 von 5** Seeds jeweils gilt:
+2. **Bestätigung auf Seeds 500–504 (neu):** volle Pipeline mit der Pilot-Konfiguration, explorativ ausgewertet. Vorab festgelegt gilt die Methode als bestätigt, wenn es **mindestens 4 von 5 Seeds gibt, in denen alle drei gleichzeitig gelten**:
    - P1 und P1b erfüllt;
    - M3-B öffnet bei `none` und bei `global` nichts über O hinaus;
    - M3-B öffnet bei `red` „Farbe 0“ nach dem Wechsel.
+   *Präzisierung, Entscheidung des Nutzers vom 04.10.2026:* Gezählt wird je Seed, ob alle drei Bedingungen zugleich erfüllt sind. Dass jede Bedingung für sich in 4 von 5 Seeds gilt, genügt nicht (dann könnten nur 3 Seeds alle drei erfüllen). Die Zählungen je Bedingung werden nur zur Information berichtet.
    Laufzeiten werden berichtet.
 3. **Nicht bestätigt:** Ergebnis zurück an den Nutzer. Eine weitere Runde läuft nur auf neuen Seeds (510–514 usw.); verbrauchte Seeds werden nie wiederverwendet.
 4. **Bestätigt:** Der Nutzer entscheidet, ob zusätzlich Seeds 505–509 laufen. Danach `frozen_config.json`, SHA-256 aller Quelldateien in `freeze.sha256`, dann der Hauptlauf. Nach dem Hauptlauf Prüfsummen bestätigen.
@@ -199,4 +200,5 @@ Grundlage ist eine explorative Diagnose auf Seed 0 (nicht Teil der Vorhersagen) 
 | S1 mit Übungs-Ontologie, S1-A 25.000 Permutationen | Faire Behandlung beider Verfahren; mit 1000 Permutationen konnte S1-A strukturell nie ablehnen. |
 | Zuschreibung nur nach dem Wechsel | Vor dem Wechsel sind alle vier Ströme identisch; eine frühere Öffnung kann den Wechsel nicht erkannt haben. |
 | Bestätigung auf Seeds 500–504 | Die neuen Regeln wurden auf einem einzigen Seed entworfen. |
+| Bestätigung zählt Seeds, in denen alle drei Bedingungen zugleich gelten (Präzisierung von §8, Entscheidung des Nutzers vom 04.10.2026) | Die frühere Formulierung „in mindestens 4 von 5 Seeds jeweils“ ließ auch eine Zählung je Bedingung zu; dann hätte die Methode mit nur 3 vollständig erfolgreichen Seeds als bestätigt gegolten. |
 | Kreuzvalidierung bleibt nach Zeilen | Teilung nach Episoden brachte in der Diagnose mehr Fehlöffnungen (2/5 gegenüber 0/5 bei `global`) und weniger Trennschärfe; δ wird mit derselben Teilung kalibriert. Abhängigkeit wird als Grenze berichtet. |
