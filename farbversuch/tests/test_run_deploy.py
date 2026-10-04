@@ -5,6 +5,9 @@ import os
 import pickle
 import platform
 import re
+import socket
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -377,6 +380,71 @@ def test_resume_skips_matching_seed_with_a_message(tmp_path, capsys, monkeypatch
     cap = capsys.readouterr()
     assert "seed 0 übersprungen (vorhanden)" in cap.err and "seed 0" not in cap.out
     assert (f.read_bytes(), f.stat().st_mtime_ns) == before
+
+
+def _done_seed(tmp_path, monkeypatch):
+    """Ausgabeordner mit fertigem Seed 0: main läuft durch, ohne zu rechnen."""
+    out = tmp_path / "o"
+    _seed_file(out, 0, TINY.as_dict(), _pinned_fingerprint(monkeypatch))
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    return out, ["--config", str(cfg), "--seeds", "0", "--out", str(out)]
+
+
+def _dead_pid():
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    return proc.pid
+
+
+def test_lock_held_during_the_run_and_removed_afterwards(tmp_path, monkeypatch):
+    out, args = _done_seed(tmp_path, monkeypatch)
+    seen = []
+    real_stage = run._stage
+    monkeypatch.setattr(run, "_stage", lambda *a: (seen.append(json.loads((out / ".lock").read_text())),
+                                                   real_stage(*a))[1])
+    main(args)
+    assert seen and all(lock == {"pid": os.getpid(), "host": socket.gethostname()} for lock in seen)
+    assert not (out / ".lock").exists()
+
+
+def test_live_lock_aborts_and_names_the_pid(tmp_path, monkeypatch):
+    out, args = _done_seed(tmp_path, monkeypatch)
+    live = os.getppid()                                                  # der Elternprozess von pytest läuft
+    lock = out / ".lock"; lock.write_text(json.dumps({"pid": live, "host": socket.gethostname()}))
+    before = lock.read_bytes()
+    monkeypatch.setattr(run, "_stage", lambda *a: pytest.fail("nichts darf starten"))
+    with pytest.raises(SystemExit, match=rf"PID {live}\b"):
+        main(args)
+    assert lock.read_bytes() == before                                   # fremde Sperre bleibt
+
+
+@pytest.mark.parametrize("content", [json.dumps({"pid": 1, "host": "anderer-rechner"}), "", "kaputt"],
+                         ids=["anderer-rechner", "leer", "kaputt"])
+def test_lock_that_cannot_be_checked_aborts(tmp_path, monkeypatch, content):
+    out, args = _done_seed(tmp_path, monkeypatch)
+    lock = out / ".lock"; lock.write_text(content)
+    monkeypatch.setattr(run, "_stage", lambda *a: pytest.fail("nichts darf starten"))
+    with pytest.raises(SystemExit, match=r"\.lock"):
+        main(args)
+    assert lock.read_text() == content
+
+
+def test_stale_lock_is_taken_over_with_a_note(tmp_path, monkeypatch, capsys):
+    out, args = _done_seed(tmp_path, monkeypatch)
+    dead = _dead_pid()
+    (out / ".lock").write_text(json.dumps({"pid": dead, "host": socket.gethostname()}))
+    main(args)
+    err = capsys.readouterr().err
+    assert re.search(rf"verwaiste Sperre.*PID {dead}\b", err) and "seed 0 übersprungen" in err
+    assert not (out / ".lock").exists()
+
+
+def test_lock_with_the_own_pid_is_stale(tmp_path, monkeypatch, capsys):
+    # z. B. Container neu gestartet: der alte Lauf hatte zufällig dieselbe PID wie dieser Prozess
+    out, args = _done_seed(tmp_path, monkeypatch)
+    (out / ".lock").write_text(json.dumps({"pid": os.getpid(), "host": socket.gethostname()}))
+    main(args)
+    assert "verwaiste Sperre" in capsys.readouterr().err and not (out / ".lock").exists()
 
 
 @pytest.mark.slow

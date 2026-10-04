@@ -9,6 +9,7 @@ import multiprocessing
 import os
 import pickle
 import platform
+import socket
 import sys
 import time
 from collections import Counter
@@ -572,24 +573,66 @@ def _stage(fn: Callable, tasks: Sequence, jobs: int) -> Iterator:
             yield from pool.imap_unordered(fn, tasks)
 
 
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(prog="python -m farbversuch.run", description="Farbversuch: Seeds ausführen")
-    ap.add_argument("--seeds", required=True, help='z. B. "400-409", "0" oder "1,5"')
-    ap.add_argument("--out", required=True,
-                    help="Ausgabeordner für seed_<n>.json (Vorhandenes mit gleicher Konfiguration wird übersprungen; "
-                         "Zwischenstände liegen in <out>/.work)")
-    ap.add_argument("--config", default=None, help="Konfigurations-JSON (Standard: Config())")
-    ap.add_argument("--jobs", type=int, default=1)
-    args = ap.parse_args(argv)
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:                      # läuft, gehört einem anderen Benutzer
+        return True
+    return True
 
-    for var in THREAD_VARS:                      # vor dem Start der Worker: sie erben sie vor dem Import von numpy
-        os.environ[var] = "1"
-    cfg = Config.from_json(args.config) if args.config else Config()
+
+def _read_lock(lock: Path) -> dict | None:
+    """{"pid", "host"} aus der Sperrdatei, None wenn unlesbar oder unvollständig."""
+    try:
+        holder = _json_object(lock)
+    except (OSError, ValueError):
+        return None
+    pid, host = holder.get("pid"), holder.get("host")
+    return {"pid": pid, "host": host} if type(pid) is int and pid > 0 and isinstance(host, str) else None
+
+
+def _acquire_lock(out: Path) -> Path:
+    """Sperre gegen zwei Läufe auf demselben Ausgabeordner: <out>/.lock, mit O_EXCL angelegt, mit PID und Rechnername.
+    Lebt der eingetragene Prozess auf diesem Rechner, Abbruch. Ist er beendet (Absturz, kill -9), ist die Sperre
+    verwaist und wird übernommen. Lässt sie sich nicht prüfen (anderer Rechner, unlesbar), Abbruch."""
+    lock, me = out / ".lock", {"pid": os.getpid(), "host": socket.gethostname()}
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            holder = _read_lock(lock)
+            if holder is None:
+                raise SystemExit(f"Abbruch: Die Sperre {lock} ist unlesbar: Ein anderer Lauf startet gerade, oder sie "
+                                 f"ist beschädigt. Läuft kein Lauf (pgrep -af farbversuch.run), die Datei löschen.")
+            if holder["host"] != me["host"]:
+                raise SystemExit(f"Abbruch: Die Sperre {lock} gehört zu PID {holder['pid']} auf dem Rechner "
+                                 f"{holder['host']} und lässt sich von hier nicht prüfen. Läuft dort kein Lauf mehr, "
+                                 f"die Datei löschen.")
+            if holder["pid"] != me["pid"] and _pid_alive(holder["pid"]):
+                raise SystemExit(f"Abbruch: Auf {out} läuft schon ein Lauf (PID {holder['pid']}, Sperre {lock}). "
+                                 f"Prüfen mit: pgrep -af farbversuch.run")
+            _log(f"verwaiste Sperre von PID {holder['pid']} übernommen ({lock})")
+            lock.unlink(missing_ok=True)
+            continue
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(me) + "\n")
+        return lock
+    raise SystemExit(f"Abbruch: Die Sperre {lock} ließ sich nicht übernehmen.")
+
+
+def _release_lock(lock: Path) -> None:
+    """Nur die eigene Sperre entfernen."""
+    if _read_lock(lock) == {"pid": os.getpid(), "host": socket.gethostname()}:
+        lock.unlink(missing_ok=True)
+
+
+def _drive(seeds: Sequence[int], cfg: Config, out: Path, jobs: int) -> None:
+    """Fertige Seeds überspringen, fremde Ergebnisse nie überschreiben, dann die drei Stufen."""
     origin = fingerprint()                       # nach dem Festlegen der Threads: so sehen ihn die Worker
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
     todo, skipped, foreign = [], [], []
-    for s in parse_seeds(args.seeds):
+    for s in seeds:
         path = out / f"seed_{s}.json"
         if not path.exists():
             todo.append(s)
@@ -611,12 +654,35 @@ def main(argv: list[str] | None = None) -> None:
     for s in skipped:
         print(f"seed {s} übersprungen (vorhanden)", file=sys.stderr, flush=True)
     tasks = [(s, cfg, str(out)) for s in todo]
-    premise_ok = dict(_stage(_prepare_job, tasks, args.jobs))                    # Stufe 1: Vorbereitung je Seed
+    premise_ok = dict(_stage(_prepare_job, tasks, jobs))                         # Stufe 1: Vorbereitung je Seed
     deploy_tasks = [(s, cfg, str(out), c) for s in todo if premise_ok[s] for c in CONDITIONS]
-    for _ in _stage(_deploy_job, deploy_tasks, args.jobs):                       # Stufe 2: je Seed und Bedingung
+    for _ in _stage(_deploy_job, deploy_tasks, jobs):                            # Stufe 2: je Seed und Bedingung
         pass
-    for seed in _stage(_finish_job, tasks, args.jobs):                           # Stufe 3: Ergebnis je Seed
+    for seed in _stage(_finish_job, tasks, jobs):                                # Stufe 3: Ergebnis je Seed
         print(f"seed {seed} fertig", flush=True)
+
+
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(prog="python -m farbversuch.run", description="Farbversuch: Seeds ausführen")
+    ap.add_argument("--seeds", required=True, help='z. B. "400-409", "0" oder "1,5"')
+    ap.add_argument("--out", required=True,
+                    help="Ausgabeordner für seed_<n>.json (Vorhandenes mit gleicher Konfiguration und Herkunft wird "
+                         "übersprungen; Zwischenstände liegen in <out>/.work, die Sperre in <out>/.lock)")
+    ap.add_argument("--config", default=None, help="Konfigurations-JSON (Standard: Config())")
+    ap.add_argument("--jobs", type=int, default=1)
+    args = ap.parse_args(argv)
+    seeds = parse_seeds(args.seeds)              # doppelte Seeds: Fehler, bevor irgendetwas angelegt wird
+
+    for var in THREAD_VARS:                      # vor dem Start der Worker: sie erben sie vor dem Import von numpy
+        os.environ[var] = "1"
+    cfg = Config.from_json(args.config) if args.config else Config()
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    lock = _acquire_lock(out)
+    try:
+        _drive(seeds, cfg, out, args.jobs)
+    finally:
+        _release_lock(lock)
 
 
 if __name__ == "__main__":
