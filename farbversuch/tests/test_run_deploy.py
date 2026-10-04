@@ -240,8 +240,9 @@ def test_non_finite_p1b_values_become_null_in_the_result(monkeypatch, tiny_phase
 @pytest.mark.slow
 def test_run_seed_content():
     r = run_seed(0, TINY)
-    assert list(r) == ["seed", "config", "env", "premise", "calibration", "practice", "delta", "p_global",
-                       "conditions", "phase1_sec", "total_sec"]
+    assert list(r) == ["seed", "config", "env", "fingerprint", "premise", "calibration", "practice", "delta",
+                       "p_global", "conditions", "phase1_sec", "total_sec"]
+    assert r["fingerprint"] == run.fingerprint()
     assert r["seed"] == 0 and r["config"] == TINY.as_dict() and r["premise"]["ok"] is True
     assert set(r["calibration"]) == {"m3_threshold", "cusum_k", "cusum_h"}
     assert set(r["p_global"]) == {"p_global", "red_surprise", "hit", "bracketed", "evals"}
@@ -310,11 +311,22 @@ def test_cli_writes_and_skips(tmp_path):
     main(args); assert f.stat().st_mtime_ns == t
 
 
-def _seed_file(out, seed, config):
+def _seed_file(out, seed, config, fingerprint=None):
+    """Fertige Ergebnisdatei; fingerprint None = Schlüssel fehlt."""
     out.mkdir(exist_ok=True)
     f = out / f"seed_{seed}.json"
-    f.write_text(json.dumps({"seed": seed, "config": config}))
+    d = {"seed": seed, "config": config}
+    if fingerprint is not None:
+        d["fingerprint"] = fingerprint
+    f.write_text(json.dumps(d))
     return f, (f.read_bytes(), f.stat().st_mtime_ns)
+
+
+def _pinned_fingerprint(monkeypatch):
+    """Fingerabdruck, wie main ihn sieht: main legt die Threadvariablen auf 1 fest, bevor es vergleicht."""
+    for k in THREAD_VARS:
+        monkeypatch.setenv(k, "1")
+    return run.fingerprint()
 
 
 @pytest.mark.parametrize("config", [{**TINY.as_dict(), "k": 99}, None])      # andere Konfiguration / keine
@@ -327,8 +339,20 @@ def test_resume_refuses_foreign_config_and_leaves_the_file_alone(tmp_path, confi
     assert sorted(x.name for x in (tmp_path / "o").iterdir()) == ["seed_0.json"]     # Seed 1 wurde nicht gestartet
 
 
-def test_resume_skips_matching_seed_with_a_message(tmp_path, capsys):
-    f, before = _seed_file(tmp_path / "o", 0, TINY.as_dict())
+@pytest.mark.parametrize("fingerprint", ["0" * 64, None])        # anderer Code/andere Umgebung / ohne Fingerabdruck
+def test_resume_refuses_same_config_from_other_code_or_environment(tmp_path, monkeypatch, fingerprint):
+    _pinned_fingerprint(monkeypatch)
+    f, before = _seed_file(tmp_path / "o", 0, TINY.as_dict(), fingerprint)
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    monkeypatch.setattr(run.multiprocessing, "get_context", lambda *a: pytest.fail("nichts darf starten"))
+    with pytest.raises(SystemExit, match="seed_0.json.*Fingerabdruck"):
+        main(["--config", str(cfg), "--seeds", "0-1", "--out", str(tmp_path / "o")])
+    assert (f.read_bytes(), f.stat().st_mtime_ns) == before
+    assert sorted(x.name for x in (tmp_path / "o").iterdir()) == ["seed_0.json"]     # Seed 1 wurde nicht gestartet
+
+
+def test_resume_skips_matching_seed_with_a_message(tmp_path, capsys, monkeypatch):
+    f, before = _seed_file(tmp_path / "o", 0, TINY.as_dict(), _pinned_fingerprint(monkeypatch))
     cfg = tmp_path / "c.json"; TINY.to_json(cfg)
     main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o")])
     cap = capsys.readouterr()
@@ -436,6 +460,7 @@ def test_total_sec_is_preparation_plus_the_condition_times():       # Festlegung
     assert r["total_sec"] == prep.sec + 3.5 and r["phase1_sec"] == prep.p1.sec
     assert r["premise"]["restanteil"] is None and r["premise"]["shift"] == .1       # nan wird zu null
     assert r["practice"]["M3-B"][0]["cand"] == 1 and r["delta"] == {"M3-B": .5}
+    assert r["fingerprint"] == prep.fingerprint                                     # Herkunft im Ergebnis
     failed = result_json(_stub_prep(ok=False), None, {})
     assert failed["conditions"] is None and failed["p_global"] is None and failed["total_sec"] == 3.
     assert failed["practice"] is None and failed["delta"] is None and failed["calibration"] is None   # D2
@@ -580,7 +605,7 @@ def test_finish_job_without_conditions_for_a_failed_premise(tmp_path):
 
 
 def test_main_runs_no_pool_when_every_seed_is_done(tmp_path, monkeypatch):
-    _seed_file(tmp_path / "o", 0, TINY.as_dict())
+    _seed_file(tmp_path / "o", 0, TINY.as_dict(), _pinned_fingerprint(monkeypatch))
     cfg = tmp_path / "c.json"; TINY.to_json(cfg)
     monkeypatch.setattr(run.multiprocessing, "get_context", lambda *a: pytest.fail("kein Pool nötig"))
     main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o")])

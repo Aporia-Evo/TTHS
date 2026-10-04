@@ -263,6 +263,24 @@ def test_evaluate_requires_identical_config_and_env():
         evaluate(mixed, seeds)
 
 
+def test_evaluate_requires_identical_fingerprints():
+    seeds = list(range(500, 505))
+
+    def results(**fps):
+        return [{**fake_result(s), "fingerprint": fps.get(f"s{s}", "a" * 64)} for s in seeds]
+    assert evaluate(results(), seeds)["P2"]["count"] == 5 and evaluate_confirmation(results(), seeds)["confirmed"]
+    with pytest.raises(ValueError, match="Fingerabdruck.*501") as exc:
+        evaluate(results(s501="b" * 64), seeds)
+    assert "502" not in str(exc.value)
+    with pytest.raises(ValueError, match="Fingerabdruck.*503"):
+        evaluate_confirmation(results(s503="b" * 64), seeds)
+    mixed = results()
+    del mixed[2]["fingerprint"]                                            # fehlender Fingerabdruck zählt als None
+    with pytest.raises(ValueError, match="Fingerabdruck.*502"):
+        evaluate(mixed, seeds)
+    assert evaluate([fake_result(s) for s in seeds], seeds)["P2"]["count"] == 5      # alle ohne: alte Ergebnisse
+
+
 def test_evaluate_compares_only_the_listed_seeds():
     results = [fake_result(s) for s in (400, 401)] + [{**fake_result(999), "env": {"other": 1}}]
     assert evaluate(results, [400, 401])["P2"]["count"] == 2

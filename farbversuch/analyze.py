@@ -108,6 +108,7 @@ def _select(results: Sequence[dict], seeds: Sequence[int]) -> list[dict]:
     rs = [by_seed[s] for s in seeds]
     _require_identical(rs, "config", "Konfiguration")
     _require_identical(rs, "env", "Umgebung (env)")
+    _require_identical(rs, "fingerprint", "Fingerabdruck von Code und Umgebung")
     return rs
 
 

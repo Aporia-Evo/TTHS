@@ -429,7 +429,8 @@ def result_json(prep: Prepared, conditions: dict | None, cond_sec: dict[str, flo
         practice = {name: [{"cand": c, "name": candidate_name(name.split("-")[1], c)} for c in cands]
                     for name, cands in p1.practice.items()}
         delta = dict(p1.deltas)
-    return {"seed": int(prep.seed), "config": prep.config, "env": env_block(), "premise": json_premise,
+    return {"seed": int(prep.seed), "config": prep.config, "env": env_block(), "fingerprint": prep.fingerprint,
+            "premise": json_premise,
             "calibration": calibration, "practice": practice, "delta": delta,
             "p_global": prep.p_global, "conditions": conditions, "phase1_sec": float(p1.sec),
             "total_sec": float(prep.sec + sum(cond_sec.values()))}
@@ -563,6 +564,7 @@ def main(argv: list[str] | None = None) -> None:
     for var in THREAD_VARS:                      # vor dem Start der Worker: sie erben sie vor dem Import von numpy
         os.environ[var] = "1"
     cfg = Config.from_json(args.config) if args.config else Config()
+    origin = fingerprint()                       # nach dem Festlegen der Threads: so sehen ihn die Worker
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     todo, skipped, foreign = [], [], []
@@ -570,13 +572,17 @@ def main(argv: list[str] | None = None) -> None:
         path = out / f"seed_{s}.json"
         if not path.exists():
             todo.append(s)
-        elif json.loads(path.read_text()).get("config") == cfg.as_dict():
-            skipped.append(s)
+            continue
+        stored = json.loads(path.read_text())
+        if stored.get("config") != cfg.as_dict():
+            foreign.append(f"{path} (andere Konfiguration)")
+        elif stored.get("fingerprint") != origin:
+            foreign.append(f"{path} (anderer Code oder andere Umgebung: Fingerabdruck fehlt oder weicht ab)")
         else:
-            foreign.append(str(path))
+            skipped.append(s)
     if foreign:                                  # nichts überschreiben, nichts starten
-        raise SystemExit("Abbruch: vorhandene Ergebnisse stammen aus einer anderen Konfiguration und werden nicht "
-                         "überschrieben: " + ", ".join(foreign))
+        raise SystemExit("Abbruch: vorhandene Ergebnisse stammen aus einem anderen Lauf und werden nicht "
+                         "überschrieben: " + "; ".join(foreign))
     for s in skipped:
         print(f"seed {s} übersprungen (vorhanden)", file=sys.stderr, flush=True)
     tasks = [(s, cfg, str(out)) for s in todo]
