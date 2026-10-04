@@ -176,12 +176,22 @@ def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
     }
 
 
+CONFIRM_MIN_SEED, CONFIRM_MIN_N = 500, 5      # Spec v2 §8: Bestätigungsrunden auf 500–504, 505–509, 510–514 …
+
+
 def _check_confirmation_seeds(seeds: Sequence[int]) -> None:
     if not seeds:
         raise ValueError("keine Seeds für die Bestätigung")
     if used := sorted(set(seeds) & set(MAIN_SEEDS)):
         raise ValueError(f"Die Bestätigung darf nicht auf Hauptlauf-Seeds ({MAIN_SEEDS[0]}–{MAIN_SEEDS[-1]}) laufen; "
                          f"verwendet: {used}")
+    if dup := duplicates(seeds):
+        raise ValueError(f"doppelte Seeds in der Seed-Liste: {dup}")
+    if low := sorted(s for s in seeds if s < CONFIRM_MIN_SEED):
+        raise ValueError(f"Die Bestätigung läuft nur auf Seeds ab {CONFIRM_MIN_SEED} (Spec v2 §8); zu klein: {low}")
+    if len(seeds) < CONFIRM_MIN_N:
+        raise ValueError(f"Die Bestätigung braucht mindestens {CONFIRM_MIN_N} Seeds (Spec v2 §8), angegeben: "
+                         f"{len(seeds)}")
 
 
 CONFIRMATION_CRITERIA = ("premise", "no_false_open", "red_correct")
@@ -358,7 +368,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--results", required=True, help="Ordner mit seed_<n>.json")
     ap.add_argument("--seeds", required=True, help='z. B. "400-409"')
     ap.add_argument("--confirm", action="store_true",
-                    help="Bestätigungsabschnitt (Spec v2 §8) anhängen; nicht mit den Hauptlauf-Seeds 400-409")
+                    help="Bestätigungsabschnitt (Spec v2 §8) anhängen; mindestens 5 Seeds, alle ab 500")
     args = ap.parse_args(argv)
     seeds = parse_seeds(args.seeds)
     if args.confirm:

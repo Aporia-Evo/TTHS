@@ -412,7 +412,7 @@ def test_confirmation_result_has_exactly_the_contract_keys_and_n():
     assert ev["no_false_open"] == {"count": 5, "fulfilled": True}
 
 
-@pytest.mark.parametrize("n, need", [(1, 1), (3, 3), (4, 4), (5, 4), (6, 5), (10, 8), (15, 12)])
+@pytest.mark.parametrize("n, need", [(5, 4), (6, 5), (7, 6), (10, 8), (15, 12)])
 def test_confirmation_need_is_ceil_of_four_fifths(n, need):
     seeds = list(range(500, 500 + n))
     ev = evaluate_confirmation([fake_result(s) for s in seeds], seeds)
@@ -528,23 +528,52 @@ def test_confirmation_ignores_other_conditions_for_false_opens():
 
 
 def test_confirmation_error_cases():
+    five = list(range(500, 505))
     with pytest.raises(ValueError, match="400.*409|Hauptlauf") as exc:
-        evaluate_confirmation([fake_result(s) for s in (405, 500)], [405, 500])
+        evaluate_confirmation([fake_result(s) for s in (405, *five)], [405, *five])
     assert "405" in str(exc.value) and "500" not in str(exc.value)
     with pytest.raises(ValueError, match="409"):                       # schon die Grenze zählt
         evaluate_confirmation([fake_result(409)], [409])
-    evaluate_confirmation([fake_result(s) for s in (399, 410)], [399, 410])      # direkt daneben ist erlaubt
     with pytest.raises(ValueError, match="doppelt.*500"):
         evaluate_confirmation([fake_result(500)], [500, 500])
-    with pytest.raises(ValueError, match="501"):                       # fehlendes Ergebnis
-        evaluate_confirmation([fake_result(500)], [500, 501])
+    with pytest.raises(ValueError, match="504"):                       # fehlendes Ergebnis
+        evaluate_confirmation([fake_result(s) for s in five[:4]], five)
     with pytest.raises(ValueError, match="Ergebnis.*500"):             # zwei Ergebnisse für einen Seed
-        evaluate_confirmation([fake_result(500), fake_result(500)], [500])
+        evaluate_confirmation([fake_result(500)] + [fake_result(s) for s in five], five)
     with pytest.raises(ValueError, match="Konfiguration.*501"):
         evaluate_confirmation([fake_result(500), {**fake_result(501), "config": {"switch_episode": 50,
-                                                                                  "n_deploy_episodes": 400}}], [500, 501])
+                                                                                  "n_deploy_episodes": 400}}]
+                              + [fake_result(s) for s in five[2:]], five)
     with pytest.raises(ValueError):                                    # ohne Seeds gäbe es "bestätigt" aus nichts
         evaluate_confirmation([], [])
+
+
+@pytest.mark.parametrize("seeds, named", [([0, 500, 501, 502, 503], "[0]"), ([499, 500, 501, 502, 503], "[499]"),
+                                          (list(range(410, 415)), "[410, 411, 412, 413, 414]"),
+                                          ([1, 2, 500, 501, 502], "[1, 2]")])
+def test_confirmation_needs_seeds_from_500_and_names_the_others(seeds, named):
+    with pytest.raises(ValueError, match="500") as exc:
+        evaluate_confirmation([fake_result(s) for s in seeds], seeds)
+    assert named in str(exc.value)
+
+
+@pytest.mark.parametrize("n", [1, 2, 4])
+def test_confirmation_needs_at_least_five_seeds(n):
+    seeds = list(range(500, 500 + n))
+    with pytest.raises(ValueError, match="mindestens 5 Seeds") as exc:
+        evaluate_confirmation([fake_result(s) for s in seeds], seeds)
+    assert f"{n}" in str(exc.value)
+
+
+def test_main_confirm_refuses_small_or_low_seed_sets_before_loading(tmp_path, capsys):
+    for args in (["--seeds", "0"], ["--seeds", "500-503"], ["--seeds", "495-499"]):
+        with pytest.raises(ValueError, match="500|mindestens 5"):         # kein FileNotFoundError: es gibt keine Dateien
+            main(["--results", str(tmp_path), *args, "--confirm"])
+    assert capsys.readouterr().out == ""
+    for s in range(500, 504):
+        (tmp_path / f"seed_{s}.json").write_text(json.dumps(fake_result(s)))
+    main(["--results", str(tmp_path), "--seeds", "500-503"])          # ohne --confirm bleibt die Auswertung erlaubt
+    assert "Bestätigung" not in capsys.readouterr().out
 
 
 def criteria_rows(md):
