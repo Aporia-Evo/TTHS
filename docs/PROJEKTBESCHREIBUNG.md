@@ -37,11 +37,11 @@ Ein Agent lernt in einer kleinen Gitterwelt, zum Ziel zu laufen. Der Boden hat v
 
 ## Voraussetzungen („weitgehend geschlossen“)
 
-Pro Seed werden vor dem Einsatz geprüft; scheitert eine Prüfung, entfällt der Seed als „Prämisse nicht erfüllt“:
+Pro Seed werden direkt nach dem Training von Routine und Vorwärtsmodell geprüft, noch vor Übungs-Ontologie und Kalibrierung, denn die Prüfungen hängen von beiden nicht ab. Scheitert eine Prüfung, entfällt der Seed als „Prämisse nicht erfüllt“; Übungs-Ontologie, Kalibrierung, δ und Einsatz werden dann nicht mehr berechnet (Entscheidung des Nutzers vom 04.10.2026):
 
 - **P1:** Die Routine behält ihre Aktion in ≥ 95 % der Schritte, wenn die Farben neu gezogen werden. Das Vorwärtsmodell ist besser als ein Modell nur mit Klassenhäufigkeiten.
 - **P1b (neu):** Die interne Darstellung z trägt nur einen kleinen Rest der Farbinformation.
-  - Restanteil ≤ 0,15. Für jede der vier Nachbarzellen sagt eine multinomiale logistische Probe die Farbe vorher (nur Zeilen, in denen die Zelle frei ist; 5-fache Kreuzvalidierung mit Teilung nach Episoden), einmal aus z und einmal aus der Rohbeobachtung. Mehrheitsbasis ist die häufigste Farbe der Trainingsteilung. Restanteil = (Treffer aus z − Mehrheitsbasis) / (Treffer aus Rohbeobachtung − Mehrheitsbasis), über die Zellen gemittelt. Eine Zelle mit weniger als 20 freien Zeilen oder mit (Roh − Mehrheit) ≤ 0,05 wird ausgelassen. Bleibt keine Zelle übrig, ist der Restanteil `nan` und die Prämisse nicht erfüllt.
+  - Restanteil ≤ 0,15. Für jede der vier Nachbarzellen sagt eine multinomiale logistische Probe die Farbe vorher (nur Zeilen, in denen die Zelle frei ist; 5-fache Kreuzvalidierung mit Teilung nach Episoden), einmal aus z und einmal aus der Rohbeobachtung. Mehrheitsbasis ist die häufigste Farbe der Trainingsteilung. Restanteil = (Trefferquote aus z − Mehrheitsbasis) / (Trefferquote aus Rohbeobachtung − Mehrheitsbasis), über die Zellen gemittelt. Eine Zelle mit weniger als 20 freien Zeilen oder mit (Roh − Mehrheit) ≤ 0,05 wird ausgelassen. Bleibt keine Zelle übrig, ist der Restanteil `nan` und die Prämisse nicht erfüllt.
   - Verschiebung ≤ 0,25: mittleres ‖z − z′‖ geteilt durch mittleres ‖z‖ bei neu gezogenen Farben, über 500 Positionen.
 
 „Vollständig geschlossen“ wird nicht behauptet.
