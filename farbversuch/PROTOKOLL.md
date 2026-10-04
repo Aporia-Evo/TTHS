@@ -33,4 +33,20 @@ Maschine aller Läufe: Cloud-Container, 4 Kerne, Python 3.11.15, numpy 2.4.6, BL
 
 **Altes Ergebnis:** aus `farbversuch/results/pilot` entfernt, damit die CLI mit der neuen Konfiguration startet. Die Werte stehen oben.
 
-**Ergebnis des nächsten Pilots:** folgt.
+**Ergebnis des nächsten Pilots** (wd 0,01, Start 07:26:53, Ende 08:41:11, `--jobs 4`):
+- **Prämisse:** erfüllt. Invarianz 0,980, Vorwärts / Häufigkeit 0,618 / 1,369, Restanteil −0,036, Verschiebung 0,103.
+- **Übungs-Ontologie:**
+  - M3-B: Wand
+  - M3-A: bit25&a3, bit23&a2, bit31&a1
+  - S1-B: Farbe 3
+  - S1-A: 8 Bit×Aktion-Merkmale
+- **δ:** M3-B 0,00078, M3-A 0,0199.
+- **Schwellen und p_global:** m3_threshold 0,851, cusum_k 1,137, cusum_h 45,2. p_global 0,248 (hit, bracketed).
+- **M3-B:**
+  - `red`: bemerkt bei 110, öffnet „Farbe 0“ bei 110 (Nutzbarkeit 0,0062).
+  - `global`: bemerkt bei 120, öffnet nichts.
+  - `none`: Fehlalarm bei 260, öffnet nichts.
+  - `walls`: nicht bemerkt.
+- **Laufzeit:** Phase 1 1801 s, davon δ M3-A ≈ 22,5 min. Bedingungen: none 1114 s, red 2063 s, global 2639 s, walls 1 s. M3-A dominiert.
+
+Keine weitere Änderung. Die Pilot-Konfiguration ist damit fertig.

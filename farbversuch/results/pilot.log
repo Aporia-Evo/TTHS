@@ -1,0 +1,20 @@
+07:26:53 seed 0 gestartet
+07:28:12 seed 0 Routine trainiert (79 s)
+07:28:14 seed 0 Vorwärtsmodell fertig (1 s)
+07:28:16 seed 0 Prämisse ok (Invarianz 0.980, Restanteil -0.036, Verschiebung 0.103)
+07:28:17 seed 0 Vor-Öffnen M3-B: Wand
+07:34:07 seed 0 Vor-Öffnen M3-A: bit25&a3, bit23&a2, bit31&a1
+07:34:07 seed 0 Vor-Öffnen S1-B: Farbe 3
+07:34:10 seed 0 Vor-Öffnen S1-A: bit93&a3, bit296&a3, bit144&a3, bit189&a2, bit143&a3, bit279&a3, bit118&a3, bit270&a3
+07:34:17 seed 0 Null-Ströme und Schwellen fertig (7 s)
+07:34:27 seed 0 δ M3-B = 0.000782
+07:56:57 seed 0 δ M3-A = 0.01991
+07:56:57 seed 0 Phase 1 fertig (1801 s)
+07:57:00 seed 0 Bedingung none gestartet
+07:57:00 seed 0 Bedingung global gestartet
+07:57:00 seed 0 Bedingung red gestartet
+07:57:00 seed 0 Bedingung walls gestartet
+07:57:01 seed 0 Bedingung walls fertig (1 s)
+08:15:34 seed 0 Bedingung none fertig (1114 s)
+08:31:23 seed 0 Bedingung red fertig (2063 s)
+08:40:59 seed 0 Bedingung global fertig (2639 s)
