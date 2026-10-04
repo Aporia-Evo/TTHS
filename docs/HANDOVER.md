@@ -20,10 +20,10 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf d
 
 ## Stand
 
-- **Code:** Die Aufgaben 1–8 des Plans v2 sind umgesetzt (Commits `998f4aa` bis `8f4633e` auf dem Branch), jede einzeln geprüft. Aufgabe 9 ist diese Dokumentation. Danach folgte eine Fix-Welle nach der Abschlussprüfung (Commits ab `2f835b1`, 04.10.2026) mit zwei Entscheidungen des Nutzers (D1, D2) und weiteren Korrekturen, siehe „Abweichungen und Festlegungen“.
+- **Code:** Die Aufgaben 1–8 des Plans v2 sind umgesetzt (Commits `998f4aa` bis `8f4633e` auf dem Branch), jede einzeln geprüft. Aufgabe 9 ist diese Dokumentation. Danach folgte eine Fix-Welle nach der Abschlussprüfung (Commits ab `2f835b1`, 04.10.2026) mit zwei Entscheidungen des Nutzers (D1, D2) und weiteren Korrekturen. Parallel dazu hat der Nutzer ein eigenes Review mit vier Korrekturen eingebracht (Commit `436c621`, `docs/REVIEW-2026-10-04.md`); beides ist zusammengeführt (Merge `b5d573f`). Siehe „Abweichungen und Festlegungen“.
 - **Tests** (gemessen auf der Maschine der Umsetzung: 4 Kerne, Python 3.11.15, numpy 2.4.6):
-  - Alle: `python -m pytest -q` gibt **332 passed** in 176 s (2:56), ohne Warnungen (auch mit `-W error`).
-  - Ohne die langsamen: `python -m pytest -q -m "not slow"` gibt **303 passed, 29 deselected** in 7,8 s.
+  - Alle: `python -m pytest -q` gibt **362 passed** in 179 s (2:58), ohne Warnungen (auch mit `-W error`).
+  - Ohne die langsamen: `python -m pytest -q -m "not slow"` gibt **333 passed, 29 deselected** in 8,7 s.
 - **Offen:** Pilot, Bestätigung, Entscheidung des Nutzers, Einfrieren, Hauptlauf, Bericht (feste Gliederung nach Spec v2 §11, noch nicht geschrieben).
 - Nicht vorhanden und noch nicht erzeugt: `farbversuch/pilot_config.json`, `farbversuch/PROTOKOLL.md`, `farbversuch/frozen_config.json`, `farbversuch/freeze.sha256`, `farbversuch/results/`.
 
@@ -32,7 +32,7 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf d
 - **Übungs-Ontologie:** Am Ende der Übungsphase öffnet jedes der vier Systeme mit seinem eigenen Erklärverfahren bis zu 8 Merkmale vor (Übungspuffer = letzte 2000 Schritte der Vorwärtsdaten; M3 mit fester Mindestverbesserung 0,01, S1 mit Holm). Sie gehen ins Basismodell des Erklärens ein, werden im Einsatz nicht erneut getestet und zählen nie als „geöffnet“. Das Bemerken bleibt unverändert.
 - **Residualisieren:** Jeder Kandidat wird je Teilung gegen das Basisdesign regressiert, nur der Rest zählt. Duplikate und Linearkombinationen gewinnen genau 0.
 - **Mindestverbesserung δ:** Geöffnet wird nur bei Verbesserung in allen 5 Teilungen und Mittel > δ. δ je M3-System = größter der 20 Null-Gewinne.
-- **Kalibrierung:** Null-Ströme haben 400 Episoden. Alle Schwellen und δ sind der **größte** der 20 Null-Werte. Erwartete Fehlalarmrate pro neuem Strom ≈ 1/21 ≈ 4,8 %.
+- **Kalibrierung:** Null-Ströme haben 400 Episoden. Alle Schwellen und δ sind der **größte** der 20 Null-Werte. Erwartete Fehlalarmrate des **Bemerkens** pro neuem Strom ≈ 1/21 ≈ 4,8 %. Das ist keine Gesamtrate falscher Öffnungen über einen ganzen Einsatz: δ stammt je Null-Strom aus einem einzigen Puffer, im Einsatz wird aber nach dem Bemerken wiederholt erklärt, und auch Holm gilt je Erklärrunde (REVIEW-2026-10-04, Punkt 2).
 - **P1b „weitgehend geschlossen“:** Restanteil ≤ 0,15 und Verschiebung von z ≤ 0,25 (500 Positionen). Scheitert P1 oder P1b, entfällt der Seed („Prämisse nicht erfüllt“). Die Prämisse wird direkt nach Routine und Vorwärtsmodell geprüft; scheitert sie, laufen weder Übungs-Ontologie, Null-Ströme und δ noch `p_global` und die Bedingungen (Entscheidung D2).
 - **S1:** Permutationen Arm B 1000, Arm A 25.000 (blockweise zu 1000), damit S1-A bei 1192 Kandidaten überhaupt ablehnen kann.
 - **Zuschreibung bei `red`** zählt nur nach dem Wechsel.
@@ -52,7 +52,7 @@ Alle Befehle im Repo-Wurzelordner.
 ```bash
 git fetch origin && git checkout claude/dreamy-wozniak-7xt321 && git pull
 python -m pip install -r requirements.txt        # numpy>=2.0, pytest>=8
-python -m pytest -q -m "not slow"                 # erwartet: 303 passed, 29 deselected
+python -m pytest -q -m "not slow"                 # erwartet: 333 passed, 29 deselected
 ```
 
 Kernzahl für `--jobs` bestimmen (physische Kerne, nicht mehr; `nproc` zählt oft Hyperthreads mit):
@@ -162,7 +162,7 @@ Ein unterbrochener Lauf lässt sich mit **demselben Befehl** neu starten, aber m
 - **Lauf im Hintergrund beenden:** `kill -- -<PGID>` beendet den Hauptprozess und alle seine Arbeitsprozesse. Mit `setsid` gestartet, ist die PGID die PID des Hauptprozesses (sie steht auch in `<out>/.lock`); sonst liefert `ps -o pgid= -p <PID>` die PGID. `pkill -f farbversuch.run` trifft nur den Hauptprozess: Die Arbeitsprozesse (Kommandozeile mit `multiprocessing.spawn`) rechnen dann ihre Aufgabe zu Ende und bleiben danach verwaist hängen (so beobachtet). Sie dann ebenfalls mit `kill -- -<PGID>` beenden.
 - **Sperre:** Jeder Lauf legt `<out>/.lock` an (PID und Rechnername) und löscht sie am Ende, auch nach einem Fehler. Ein zweiter Lauf auf denselben Ausgabeordner bricht ab und nennt die PID des ersten. Nach `kill`, Absturz oder Neustart der Maschine bleibt die Sperre liegen; sie ist dann **verwaist**: Der nächste Start sieht, dass die PID nicht mehr lebt, übernimmt die Sperre und meldet das auf stderr. Eine Sperre von einem anderen Rechner oder eine unlesbare Sperre lässt sich nicht prüfen; dann bricht der Start ab, und die Datei darf nur von Hand gelöscht werden, wenn sicher kein Lauf mehr auf diesen Ordner schreibt.
 - Fertige `seed_<n>.json` mit gleicher Konfiguration **und** gleichem Fingerabdruck werden übersprungen. Liegt dort ein Ergebnis mit anderer Konfiguration oder mit anderem oder fehlendem Fingerabdruck (anderer Code, andere Umgebung), bricht die CLI ab, ohne etwas zu überschreiben, und nennt den Grund je Datei. Eine unlesbare `seed_<n>.json` beendet den Start mit der Aufforderung, sie zu verschieben oder zu löschen.
-- Zwischenstände liegen in `<out>/.work` (Vorbereitung je Seed, Ergebnis je Seed und Bedingung). Sie werden nur wiederverwendet, wenn Konfiguration **und** Herkunft übereinstimmen. Die Herkunft ist ein SHA-256 über den Quelltext aller `farbversuch/*.py` (ohne `tests/`) und die Umgebung (Threadvariablen, numpy, BLAS, Python, Maschine, CPU). Anderer Code oder andere Umgebung heißt: Neuberechnung. Eine unlesbare oder beschädigte Zwischendatei zählt als fehlend und wird ebenfalls neu berechnet (Hinweis auf stderr).
+- Zwischenstände liegen in `<out>/.work` (Vorbereitung je Seed, Ergebnis je Seed und Bedingung). Sie werden nur wiederverwendet, wenn Konfiguration **und** Herkunft übereinstimmen. Die Herkunft ist ein SHA-256 über den Quelltext aller `farbversuch/*.py` (ohne `tests/`) und die Umgebung (Threadvariablen, numpy, BLAS, Python, Maschine, CPU). Anderer Code oder andere Umgebung heißt: Neuberechnung. Eine unlesbare, beschädigte oder unvollständige Zwischendatei (auch ein fremdes Objekt im Pickle, ein anderer Seed oder ein Bedingungsergebnis ohne `result` oder `sec`) zählt als fehlend und wird ebenfalls neu berechnet. Wer `<out>/.work` von Hand löscht (z. B. um Platz zu schaffen), startet danach denselben Befehl, ebenfalls mit `2>>`.
 - **Abgestürzter Arbeitsprozess:** Beendet das System einen Arbeitsprozess (Speichermangel, `kill -9`), bricht der Lauf sofort mit einer Meldung und Exitcode 1 ab und nennt den Befehl zum Fortsetzen; fertige Zwischenstände bleiben. Wirft eine Aufgabe eine Ausnahme, startet keine weitere Aufgabe, laufende rechnen zu Ende, dann endet der Lauf mit dem Fehlertext. In beiden Fällen anhalten und den Nutzer fragen, nicht umgehen.
 - Die `seed_<n>.json` entstehen erst in Stufe 3, also nachdem **alle** Seeds die Stufen 1 und 2 durchlaufen haben. Nach einem Abbruch in Stufe 1 oder 2 gibt es daher noch keine Ergebnisdateien, aber die fertigen Zwischenstände bleiben erhalten.
 - Quelldateien in `farbversuch/` während eines Laufs nicht ändern.
@@ -186,7 +186,7 @@ Zum Einfügen als erste Nachricht der neuen Sitzung:
 ````text
 Du setzt das Projekt „Farbversuch“ fort (Repo aporia-evo/tths, Branch claude/dreamy-wozniak-7xt321, Python mit numpy). Antworte auf Deutsch, knapp und sachlich. Schreibe „bestätigt“ oder „bewiesen“ nur bei erfüllter Vorhersage.
 
-Lies zuerst vollständig: docs/HANDOVER.md, docs/PROJEKTBESCHREIBUNG.md und docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-v2-design.md. Bindend sind diese Spezifikation v2 und der Plan docs/superpowers/plans/2026-10-03-farb-wiederoeffnung-v2.md.
+Lies zuerst vollständig: docs/HANDOVER.md, docs/PROJEKTBESCHREIBUNG.md, docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-v2-design.md und docs/REVIEW-2026-10-04.md (Review des Nutzers; Punkt 1 ist durch die Entscheidung D1 erledigt). Bindend sind diese Spezifikation v2 und der Plan docs/superpowers/plans/2026-10-03-farb-wiederoeffnung-v2.md.
 
 Auftrag: Pilot auf Seed 0, danach Bestätigung auf den Seeds 500-504, Ergebnisse committen und pushen, Bericht an mich. Danach anhalten.
 
@@ -205,7 +205,7 @@ git fetch origin && git checkout claude/dreamy-wozniak-7xt321 && git pull
 python -m pip install -r requirements.txt
 python -m pytest -q -m "not slow"
 ```
-Erwartet: 303 passed, 29 deselected. Schlägt das fehl, halte an und melde es.
+Erwartet: 333 passed, 29 deselected. Schlägt das fehl, halte an und melde es.
 Bestimme die Zahl der physischen Kerne (`lscpu -p=CORE,SOCKET | grep -v '^#' | sort -u | wc -l`, sonst `nproc`) und nenne sie als JOBS, höchstens 20.
 
 Schritt 2: Pilot auf Seed 0
@@ -245,6 +245,15 @@ Danach STOPP. Starte nicht die Seeds 400-409 und führe nicht `freeze write` aus
 
 ## Abweichungen und Festlegungen während der Umsetzung (v2)
 
+Review des Nutzers vom 04.10.2026 (Commit `436c621`, Begründung und Reproduktionen in `docs/REVIEW-2026-10-04.md`), zusammengeführt mit der Fix-Welle:
+
+- **Prämisse aus Messwerten (`analyze._premise_ok`):** Die Auswertung zählt P1 und P1b nur als erfüllt, wenn `ok` wahr ist **und** alle fünf Messwerte endliche Zahlen sind und die Grenzen der gespeicherten Konfiguration einhalten (fehlende Grenzen: Standardwerte). Ein altes oder widersprüchliches `ok` allein genügt nicht; v1-Ergebnisse ohne P1b-Werte können daher weder die Bestätigung noch die Hauptauswertung bestehen. Das gilt überall, auch für die gemeinsame Bestätigung (D1) und die Nutzbarkeit. Nicht endliche Werte erscheinen im Bericht als „–“.
+- **Einfrieren verlangt `frozen_config.json` im Manifest:** Fehlt der Eintrag in `freeze.sha256`, meldet `freeze verify` die Datei (vorher: Erfolg, auch bei geänderter oder gelöschter Konfiguration). Davon profitiert auch die WARNUNG für 400–409 (M5).
+- **Wiederaufnahme mit unbrauchbaren Zwischenständen:** Leere, abgeschnittene, unlesbare oder unvollständige `.work`-Dateien werden neu berechnet; Rechenfehler bleiben sichtbar. Im Merge mit M9 zu einem Ladeweg zusammengefasst.
+- **M3-Kalibrierung mit derselben Reduktion wie der Monitor:** `m3_trace` mittelt das Fenster direkt statt über kumulative Summen. Vorher konnte die Schwelle in der letzten Stelle unter dem Monitorwert desselben Null-Stroms liegen (Reproduktion: 1.1618018614563417 gegen 1.1618018614563452) und einen Null-Alarm auslösen. Auf `TINY` verschiebt das `m3_threshold` um 4e-16 bis 3e-15; alle anderen Werte sind bitgleich.
+- **Review-Punkt 1 (Bestätigungskriterium uneindeutig)** ist durch die Entscheidung des Nutzers D1 vom 04.10.2026 erledigt: gezählt werden Seeds, in denen alle drei Kriterien gleichzeitig gelten.
+- **Review-Punkt 2:** Die ≈ 4,8 % gelten für das Bemerken pro Strom, nicht als Gesamtrate falscher Öffnungen über einen ganzen Einsatz (siehe „Was v2 gegenüber v1 ändert“).
+
 Fix-Welle nach der Abschlussprüfung (04.10.2026):
 
 - **D1 Bestätigung zählt gemeinsam (Entscheidung des Nutzers):** Ein Seed zählt nur, wenn alle drei Kriterien zugleich gelten; bestätigt ist die Methode bei mindestens 4 von 5 solchen Seeds. Die Zählungen je Kriterium stehen im Bericht nur zur Information. Spec v2 §8 (mit Zeile in Anhang A) und Plan-Festlegung 8 sind entsprechend präzisiert. Folge: strenger als die Lesart je Kriterium; 5/4/4 je Kriterium kann „nicht bestätigt“ heißen.
@@ -262,7 +271,7 @@ Neu in v2 (Entscheidungen der Umsetzung, jeweils mit Auswirkung):
 
 - **S1-Permutationstest auf Raster:** `perm_pvalues` rundet die Überraschungen auf ein Raster 2^-q (relative Abweichung etwa 5e-13 bei 2000 Schritten). Dadurch sind die p-Werte bitgleich für jede Blockgröße (`perm_chunk`), und exakte Gleichstände beim Vergleich der Permutationen hängen nicht mehr an der Reihenfolge der Gleitkommasummen. Der Zufallsstrom bleibt unverändert.
 - **P1b nicht endlich:** Ist der Restanteil `nan` (keine Nachbarzelle bleibt übrig) oder die Verschiebung nicht endlich, steht in der JSON `null`, und die Prämisse gilt als nicht erfüllt.
-- **Bericht, erwartete Fehlalarmrate:** Die Zeile rechnet (`max_null_alarms` + 1) / (`n_null_streams` + 1). Für v2 ergibt das 1/21 ≈ 4,8 %. Für Ergebnisse mit anderer Konfiguration stimmt die Zeile ebenfalls (v1 mit einem erlaubten Alarm: 9,5 %).
+- **Bericht, erwartete Fehlalarmrate:** Die Zeile rechnet (`max_null_alarms` + 1) / (`n_null_streams` + 1). Für v2 ergibt das 1/21 ≈ 4,8 %, die Rate für das Bemerken pro Strom (keine Gesamtrate falscher Öffnungen). Für Ergebnisse mit anderer Konfiguration stimmt die Zeile ebenfalls (v1 mit einem erlaubten Alarm: 9,5 %).
 - **Fortsetzen nur bei gleicher Herkunft:** `.work`-Zwischenstände werden nur bei gleicher Konfiguration und gleichem Fingerabdruck von Code und Umgebung wiederverwendet (siehe „Unterbrechen und Fortsetzen“). Das kam aus der Prüfung von Aufgabe 7.
 - **Gleiches Ergebnis in beiden Ausführungswegen:** Der parallele Treiber liefert je Seed dasselbe wie das sequentielle `run_seed` (bis auf die `_sec`-Schlüssel). Der Test rechnet die Referenz in einem frischen Prozess mit einem BLAS-Thread, weil der pytest-Prozess mehrere Threads nutzt und die Ergebnisse sich sonst ab der sechsten Stelle unterscheiden.
 - **`total_sec`** ist Vorbereitungszeit plus Summe der Bedingungszeiten, in beiden Wegen gleich definiert (Plan v2, Festlegung 9). Es ist keine Wandzeit.
@@ -282,12 +291,11 @@ Aus v1 und weiter gültig:
 
 Bei der Prüfung der Aufgaben bewusst offen gelassen. Sie betreffen den Betrieb:
 
-- **Beschädigte Zwischendatei:** Seit der Fix-Welle (M9) wird eine abgeschnittene oder beschädigte Datei in `<out>/.work` (z. B. nach vollem Datenträger, oder ein Pickle aus geändertem Code) neu berechnet, mit Hinweis auf stderr; den Ordner muss dafür niemand löschen. Wer `<out>/.work` trotzdem löscht (z. B. um Platz zu schaffen), startet danach denselben Befehl mit `2>>` statt `2>`, sonst ist das bisherige Log überschrieben.
 - **Ergebnisdateien erst am Ende:** Ein Fehler beendet den Lauf (siehe oben). Fertige Seeds warten in Stufe 3 auf die übrigen, also erscheinen die `seed_<n>.json` erst am Ende der Stufen 1 und 2.
 - **Quelldateien während eines Laufs:** Der Fingerabdruck wird am Anfang bzw. Ende eines Auftrags von der Platte gelesen. Wer Code während eines laufenden Laufs ändert, bekommt Zwischenstände mit falscher Herkunft. Nicht tun.
 - **M3-A im Lauftest:** Die Lauf-Tests (`TINY`) lassen M3-A weg. Vor-Öffnen und δ-Kalibrierung für M3-A (1192 Kandidaten) in `phase1` laufen in den Tests nicht durch; der Pilot ist der erste volle Lauf damit. Ein Fehler dort wird gemeldet, nicht umgangen.
 - **Testlücke ohne bekannten Code-Fehler:** Die P1b-Tests prüfen nicht gegen Informationslecks (z. B. eine Darstellung, die Episoden auswendig lernt). Dass der Rest der Testzeilen mit den **Trainings**koeffizienten berechnet wird (Plan v2, Festlegung 3) und dass die Kriterien 2 und 3 der Bestätigung nur M3-B zählen, legen seit der Fix-Welle eigene Tests fest.
-- **Bestätigung aus v1-Ergebnissen:** `analyze --confirm` übernimmt `premise.ok` aus der Ergebnisdatei. Ergebnisse im v1-Format (ohne Restanteil und Verschiebung) würden P1b als erfüllt zählen. Solche Ergebnisse liegen nicht im Repo; für neue Läufe ist das kein Thema.
+- **Aufräumtest in anderer Umgebung:** `test_staged_run_resumes_from_partial_work_files` (langsam) scheiterte in der Umgebung des Nutzers (Python 3.12, numpy 2.5.3) an wieder auftauchenden Dateien in `.work`, auch auf dem Ausgangscommit (REVIEW-2026-10-04). Hier (Python 3.11.15, numpy 2.4.6) besteht er wiederholt, mit altem und neuem Treiber; eine Ursache im Code ist nicht gefunden (kein Arbeitsprozess überlebt eine Stufe). Tritt so etwas bei einem echten Lauf auf: anhalten und melden.
 
 ## Arbeitsweise im Projekt
 

@@ -18,7 +18,7 @@ Ein Agent lernt in einer kleinen Gitterwelt, zum Ziel zu laufen. Der Boden hat v
 - **Routine:** imitiert einen BFS-Lehrer (4000 Episoden), Encoder z = tanh(E·x) mit k = 32, Softmax-Policy, handelt deterministisch.
 - **Vorwärtsmodell:** multinomiale logistische Regression auf [z, Aktion, 1], sagt die Verschiebung vorher. Überraschung = −log p. Es liefert die Überraschung für das Bemerken, für alle Systeme gleich.
 - **Übungs-Ontologie (neu in v2):** Jedes System öffnet am Ende der Übungsphase auf den letzten 2000 Schritten der Vorwärtsdaten mit seinem eigenen Erklärverfahren bis zu 8 Merkmale vor (M3: feste Mindestverbesserung 0,01 nats pro Schritt; S1: Holm-Ablehnungen). Diese Merkmale gehören zum geübten Modell. Sie gehen in das Basismodell des Erklärens ein, werden im Einsatz nie erneut getestet und zählen nie als „wieder geöffnet“. Sie wirken nur auf das Erklären, nicht auf das Bemerken.
-- **Kalibrierung:** 20 Null-Ströme zu je 400 Episoden. Schwellen für das Bemerken (M3 und CUSUM) sind der größte der 20 Null-Werte. Erwartete Fehlalarmrate pro neuem Strom ≈ 1/21 ≈ 4,8 %. Die **Mindestverbesserung δ** (je M3-System) ist der größte der 20 Null-Gewinne; ein Null-Gewinn ist die größte mittlere Verbesserung unter den Kandidaten, die in allen 5 Teilungen positiv sind (0, wenn keiner).
+- **Kalibrierung:** 20 Null-Ströme zu je 400 Episoden. Schwellen für das Bemerken (M3 und CUSUM) sind der größte der 20 Null-Werte. Erwartete Fehlalarmrate des Bemerkens pro neuem Strom ≈ 1/21 ≈ 4,8 %; das ist keine Gesamtrate falscher Öffnungen über einen ganzen Einsatz, denn erklärt wird wiederholt. Die **Mindestverbesserung δ** (je M3-System) ist der größte der 20 Null-Gewinne; ein Null-Gewinn ist die größte mittlere Verbesserung unter den Kandidaten, die in allen 5 Teilungen positiv sind (0, wenn keiner).
 - **Einsatz:** 400 Episoden, Wechsel bei Episode 100, vier Bedingungen auf denselben Karten:
   - `none`: keine Änderung
   - `red`: die Farbe wird rutschig
@@ -78,3 +78,4 @@ Pilot, Bestätigung und Hauptlauf laufen jeweils komplett auf derselben Maschine
 - Plan v2 (bindend, mit Festlegungen 1–10): `docs/superpowers/plans/2026-10-03-farb-wiederoeffnung-v2.md`
 - v1 als Geschichte: `docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-design.md`, `docs/superpowers/plans/2026-10-03-farb-wiederoeffnung.md`
 - Übergabe an die nächste Sitzung, mit Laufbefehlen und Prompt: `docs/HANDOVER.md`
+- Review des Nutzers vom 04.10.2026 mit vier behobenen Fehlern und Hinweisen zur Deutung: `docs/REVIEW-2026-10-04.md`
