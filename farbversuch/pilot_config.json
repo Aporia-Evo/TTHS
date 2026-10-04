@@ -9,7 +9,7 @@
   "k": 32,
   "lr": 0.5,
   "epochs": 1000,
-  "wd": 0.001,
+  "wd": 0.01,
   "init_std": 0.01,
   "n_forward_episodes": 1000,
   "fwd_l2": 0.001,
