@@ -30,7 +30,8 @@ from farbversuch.world import N_DISP, Map, Traj, bfs_distances, make_map, observ
 
 CONDITIONS = ("none", "red", "global", "walls")
 # Die BLAS-Threadzahl ändert die Gleitkommareihenfolge und damit die Ergebnisse: immer ein Thread
-THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+               "BLIS_NUM_THREADS")
 
 
 def env_params(cfg: Config, condition: str, episode: int, p_global: float) -> tuple[float, float, bool]:
@@ -339,10 +340,25 @@ def _blas_id() -> str | None:
     return " ".join(str(blas[k]) for k in ("name", "version") if blas.get(k)) or None
 
 
+_CPUINFO = Path("/proc/cpuinfo")
+
+
+def _cpu_model() -> str | None:
+    """Prozessormodell: erste Angabe „model name“ aus /proc/cpuinfo, sonst platform.processor(), sonst None."""
+    try:
+        for line in _CPUINFO.read_text().splitlines():
+            key, sep, value = line.partition(":")
+            if sep and key.strip() == "model name" and value.strip():
+                return value.strip()
+    except (OSError, UnicodeDecodeError):
+        pass
+    return platform.processor() or None
+
+
 def env_block() -> dict:
-    """Umgebung, in der gerechnet wurde (Threadvariablen so, wie dieser Prozess sie sieht)."""
+    """Umgebung, in der gerechnet wurde (Threadvariablen so, wie dieser Prozess sie sieht, und die Maschine)."""
     return {**{var: os.environ.get(var) for var in THREAD_VARS}, "numpy": np.__version__, "blas": _blas_id(),
-            "python": platform.python_version()}
+            "python": platform.python_version(), "machine": platform.machine(), "cpu": _cpu_model()}
 
 
 _SRC_DIR = Path(__file__).resolve().parent

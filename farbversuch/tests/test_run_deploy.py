@@ -171,19 +171,43 @@ def test_env_block_is_plain_and_reflects_the_environment(monkeypatch):
     monkeypatch.setenv("OMP_NUM_THREADS", "1")
     monkeypatch.setenv("OPENBLAS_NUM_THREADS", "3")
     monkeypatch.delenv("MKL_NUM_THREADS", raising=False)
+    monkeypatch.setenv("BLIS_NUM_THREADS", "2")
     env = env_block()
-    assert set(env) == {*THREAD_VARS, "numpy", "blas", "python"}
+    assert set(env) == {*THREAD_VARS, "numpy", "blas", "python", "machine", "cpu"}
     assert (env["OMP_NUM_THREADS"], env["OPENBLAS_NUM_THREADS"], env["MKL_NUM_THREADS"]) == ("1", "3", None)
+    assert env["BLIS_NUM_THREADS"] == "2"
     assert env["numpy"] == np.__version__ and env["python"] == platform.python_version()
     assert env["blas"] is None or (type(env["blas"]) is str and env["blas"])
+    assert env["machine"] == platform.machine() and (env["cpu"] is None or type(env["cpu"]) is str)
     assert json.loads(json.dumps(env)) == env
+
+
+def test_thread_vars_cover_every_blas_backend():
+    assert THREAD_VARS == ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+                           "BLIS_NUM_THREADS")
+
+
+def test_cpu_model_from_cpuinfo_else_processor_else_none(tmp_path, monkeypatch):
+    info = tmp_path / "cpuinfo"
+    monkeypatch.setattr(run, "_CPUINFO", info)
+    monkeypatch.setattr(platform, "processor", lambda: "x86_64")
+    info.write_text("processor\t: 0\nvendor_id\t: X\nmodel name\t: Fancy CPU 3000 @ 2.0GHz\n\n"
+                    "processor\t: 1\nmodel name\t: Andere CPU\n")
+    assert run._cpu_model() == "Fancy CPU 3000 @ 2.0GHz"                      # die erste Angabe
+    assert env_block()["cpu"] == "Fancy CPU 3000 @ 2.0GHz"
+    info.write_text("processor\t: 0\nBogoMIPS\t: 50.00\n")                     # ohne model name (z. B. ARM)
+    assert run._cpu_model() == "x86_64"
+    info.unlink()                                                             # nicht lesbar
+    assert run._cpu_model() == "x86_64"
+    monkeypatch.setattr(platform, "processor", lambda: "")
+    assert run._cpu_model() is None
 
 
 @pytest.mark.slow
 def test_run_seed_schema():
     r = run_seed(0, TINY)
     assert set(r["conditions"]) == set(CONDITIONS) and set(r["conditions"]["red"]) == set(TINY.systems)
-    assert set(r["env"]) == {*THREAD_VARS, "numpy", "blas", "python"}
+    assert set(r["env"]) == {*THREAD_VARS, "numpy", "blas", "python", "machine", "cpu"}
     assert json.loads(json.dumps(r)) == r
 
 
@@ -319,8 +343,8 @@ def test_cli_pins_blas_threads_even_with_one_job(tmp_path, monkeypatch):
     cfg = tmp_path / "c.json"; TINY.to_json(cfg)
     main(["--config", str(cfg), "--seeds", "0", "--out", str(tmp_path / "o")])
     r = json.loads((tmp_path / "o" / "seed_0.json").read_text())
-    assert [os.environ[k] for k in THREAD_VARS] == ["1"] * 3
-    assert [r["env"][k] for k in THREAD_VARS] == ["1"] * 3          # so gesehen im Worker
+    assert [os.environ[k] for k in THREAD_VARS] == ["1"] * len(THREAD_VARS)
+    assert [r["env"][k] for k in THREAD_VARS] == ["1"] * len(THREAD_VARS)          # so gesehen im Worker
 
 
 @pytest.mark.slow
