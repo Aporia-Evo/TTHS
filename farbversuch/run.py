@@ -98,6 +98,14 @@ def _stack(rollouts: list[tuple[Map, Traj]]) -> tuple[np.ndarray, np.ndarray, np
             np.concatenate([t.disps for _, t in rollouts]))
 
 
+def _tail(n: int, what: str, *arrays: np.ndarray) -> tuple[np.ndarray, ...]:
+    """Die letzten n Zeilen jedes Arrays. Weniger als n Zeilen sind ein Fehler: der Puffer wäre sonst stillschweigend
+    kürzer als buffer_size."""
+    if len(arrays[0]) < n:
+        raise ValueError(f"{what}: nur {len(arrays[0])} Schritte, buffer_size verlangt {n}")
+    return tuple(a[-n:] for a in arrays)
+
+
 def _fit_kw(cfg: Config) -> dict:
     return dict(l2=cfg.fwd_l2, n_folds=cfg.n_folds, tol=cfg.logreg_tol, max_iter=cfg.logreg_max_iter)
 
@@ -163,9 +171,9 @@ def train_phase1(seed: int, cfg: Config) -> Phase1:
                                max_iter=cfg.logreg_max_iter)
     class_counts = np.bincount(D, minlength=N_DISP)
 
-    n = cfg.buffer_size
-    return Phase1(routine=routine, forward=forward, class_counts=class_counts, practice_obs=X[-n:],
-                  practice_actions=A[-n:], practice_disps=D[-n:], practice_episodes=episodes[-n:],
+    p_obs, p_actions, p_disps, p_episodes = _tail(cfg.buffer_size, "Übungspuffer (Vorwärtsdaten)", X, A, D, episodes)
+    return Phase1(routine=routine, forward=forward, class_counts=class_counts, practice_obs=p_obs,
+                  practice_actions=p_actions, practice_disps=p_disps, practice_episodes=p_episodes,
                   sec=time.perf_counter() - t0)
 
 
@@ -173,7 +181,7 @@ def calibrate_phase1(seed: int, cfg: Config, p1: Phase1) -> Phase1:
     """Phase 1, Spec §4 Schritte 3–4: Übungs-Ontologie je System, Null-Ströme, Schwellen und δ. Teuer; läuft nur
     bei erfüllter Prämisse (Entscheidung D2 des Nutzers vom 04.10.2026)."""
     t0 = time.perf_counter()
-    routine, forward, n = p1.routine, p1.forward, cfg.buffer_size
+    routine, forward = p1.routine, p1.forward
     practice = _pre_open_practice(seed, cfg, forward, routine.encode(p1.practice_obs), p1.practice_obs,
                                   p1.practice_actions, p1.practice_disps)
 
@@ -181,8 +189,7 @@ def calibrate_phase1(seed: int, cfg: Config, p1: Phase1) -> Phase1:
     for j in range(cfg.n_null_streams):
         runs = routine_rollouts(routine, seed, NULL, cfg.n_null_episodes, cfg, p_slip=cfg.p_slip, stream=j)
         null_streams.append([forward.surprise(routine.encode(t.obs), t.actions, t.disps) for _, t in runs])
-        obs, actions, disps = _stack(runs)
-        null_buffers.append((obs[-n:], actions[-n:], disps[-n:]))
+        null_buffers.append(_tail(cfg.buffer_size, f"δ-Puffer von Null-Strom {j}", *_stack(runs)))
     m3_threshold = calibrate_m3(null_streams, window=cfg.notice_window, interval=cfg.check_interval,
                                 max_alarms=cfg.max_null_alarms)
     cusum_k, cusum_h = calibrate_cusum(null_streams, sd_factor=cfg.cusum_sd_factor, max_alarms=cfg.max_null_alarms)

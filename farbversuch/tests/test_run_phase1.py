@@ -100,6 +100,26 @@ def test_premise_needs_only_the_trained_part_of_phase1(tiny_phase1):
     assert full.sec >= trained.sec
 
 
+# Mini-Konfiguration: Routine kaum trainiert, Episoden laufen meist bis max_steps; schnell genug ohne slow
+SHORT = dataclasses.replace(TINY, n_teacher_episodes=5, epochs=1, systems=("M3-B",))
+
+
+def test_practice_buffer_shorter_than_buffer_size_is_an_error():
+    cfg = dataclasses.replace(SHORT, n_forward_episodes=2, buffer_size=400)      # höchstens 80 Schritte
+    with pytest.raises(ValueError, match="Übungspuffer.*buffer_size") as exc:
+        run.train_phase1(0, cfg)
+    assert "400" in str(exc.value)
+
+
+def test_null_buffer_shorter_than_buffer_size_is_an_error():
+    cfg = dataclasses.replace(SHORT, n_forward_episodes=20, buffer_size=200, n_null_episodes=2)
+    p = run.train_phase1(0, cfg)
+    assert len(p.practice_obs) == 200                                             # Übungspuffer reicht
+    with pytest.raises(ValueError, match="Null-Strom 0.*buffer_size") as exc:
+        run.calibrate_phase1(0, cfg, p)
+    assert "200" in str(exc.value)
+
+
 def _stacked(runs):
     return (np.concatenate([t.obs for _, t in runs]), np.concatenate([t.actions for _, t in runs]),
             np.concatenate([t.disps for _, t in runs]))
