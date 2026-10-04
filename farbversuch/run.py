@@ -7,9 +7,9 @@ import json
 import math
 import multiprocessing
 import os
-import shlex
 import pickle
 import platform
+import shlex
 import socket
 import sys
 import time
@@ -166,7 +166,7 @@ def _calibrate_deltas(seed: int, cfg: Config, routine: Routine, null_buffers: Se
 
 
 def train_phase1(seed: int, cfg: Config) -> Phase1:
-    """Phase 1, Spec §4 Schritte 1–2: Routine, Vorwärtsmodell und Übungspuffer. Mehr braucht die Prämisse nicht."""
+    """Phase 1, Spec §4 Schritte 1–2: Routine, Vorwärtsmodell, Übungspuffer; mehr braucht die Prämisse nicht."""
     t0 = time.perf_counter()
     X, A = teacher_data(seed, cfg)
     routine = train_routine(X, A, rng(seed, INIT), cfg.k, cfg.lr, cfg.epochs, cfg.wd, cfg.init_std)
@@ -406,8 +406,9 @@ def prepare_seed(seed: int, cfg: Config) -> Prepared:
     _log(f"seed {seed} gestartet")
     p1 = train_phase1(seed, cfg)
     premise = premise_checks(seed, cfg, p1)
-    _log(f"seed {seed} Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'} (Invarianz {premise['color_invariance']:.3f}, "
-         f"Restanteil {premise['restanteil']:.3f}, Verschiebung {premise['shift']:.3f})")
+    _log(f"seed {seed} Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'} "
+         f"(Invarianz {premise['color_invariance']:.3f}, Restanteil {premise['restanteil']:.3f}, "
+         f"Verschiebung {premise['shift']:.3f})")
     p_global = None
     if premise["ok"]:
         p1 = calibrate_phase1(seed, cfg, p1)
@@ -570,10 +571,10 @@ def _finish_job(task: tuple[int, Config, str]) -> int:
 
 
 def _stage(fn: Callable, tasks: Sequence, jobs: int) -> Iterator:
-    """Eine Stufe in einem frisch gestarteten Prozess-Pool (auch bei jobs = 1); Ergebnisse in Fertigstellungsreihenfolge.
-    Stirbt ein Arbeitsprozess (kill -9, Speichermangel), meldet der Pool BrokenProcessPool, statt zu hängen. Wirft eine
-    Aufgabe eine Ausnahme, startet keine weitere; laufende rechnen zu Ende (ihre Zwischenstände bleiben), dann geht die
-    Ausnahme weiter."""
+    """Eine Stufe in einem frisch gestarteten Prozess-Pool (auch bei jobs = 1); Ergebnisse in der Reihenfolge des
+    Fertigwerdens. Stirbt ein Arbeitsprozess (kill -9, Speichermangel), meldet der Pool BrokenProcessPool, statt zu
+    hängen. Wirft eine Aufgabe eine Ausnahme, startet keine weitere; laufende rechnen zu Ende (ihre Zwischenstände
+    bleiben), dann geht die Ausnahme weiter."""
     if not tasks:
         return
     pool = ProcessPoolExecutor(max_workers=max(1, jobs), mp_context=multiprocessing.get_context("spawn"))
@@ -624,8 +625,8 @@ def _acquire_lock(out: Path) -> Path:
                                  f"ist beschädigt. Läuft kein Lauf (pgrep -af farbversuch.run), die Datei löschen.")
             if holder["host"] != me["host"]:
                 raise SystemExit(f"Abbruch: Die Sperre {lock} gehört zu PID {holder['pid']} auf dem Rechner "
-                                 f"{holder['host']} und lässt sich von hier nicht prüfen. Läuft dort kein Lauf mehr, "
-                                 f"die Datei löschen.")
+                                 f"{holder['host']} und lässt sich von hier nicht prüfen. Läuft dort kein Lauf "
+                                 f"mehr, die Datei löschen.")
             if holder["pid"] != me["pid"] and _pid_alive(holder["pid"]):
                 raise SystemExit(f"Abbruch: Auf {out} läuft schon ein Lauf (PID {holder['pid']}, Sperre {lock}). "
                                  f"Prüfen mit: pgrep -af farbversuch.run")
@@ -701,8 +702,8 @@ def main(argv: list[str] | None = None) -> None:
         command = shlex.join(["python", "-m", "farbversuch.run", *(sys.argv[1:] if argv is None else argv)])
         raise SystemExit(f"Abbruch: Ein Arbeitsprozess wurde unerwartet beendet (z. B. vom System wegen Speichermangel "
                          f"oder mit kill -9); seine Aufgabe ist verloren, die übrigen Arbeitsprozesse wurden beendet. "
-                         f"Fertige Zwischenstände in {out / '.work'} bleiben erhalten. Fortsetzen mit demselben Befehl, "
-                         f"das Log mit 2>> statt 2> anhängen:\n  {command}") from None
+                         f"Fertige Zwischenstände in {out / '.work'} bleiben erhalten. Fortsetzen mit demselben "
+                         f"Befehl, das Log mit 2>> statt 2> anhängen:\n  {command}") from None
     finally:
         _release_lock(lock)
 

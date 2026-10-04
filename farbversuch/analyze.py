@@ -203,10 +203,10 @@ CONFIRMATION_CRITERIA = ("premise", "no_false_open", "red_correct")
 
 
 def evaluate_confirmation(results: Sequence[dict], seeds: Sequence[int]) -> dict:
-    """Bestätigung (Spec v2 §8, Präzisierung des Nutzers vom 04.10.2026): ein Seed zählt nur, wenn alle drei Kriterien
-    zugleich gelten; bestätigt, wenn das in mindestens ⌈0,8·n⌉ Seeds so ist ("joint"). Die Zählungen je Kriterium
-    stehen zur Information daneben und entscheiden nichts. Ein Seed mit gescheiterter Prämisse erfüllt auch Kriterium 2
-    und 3 nicht. Seeds des Hauptlaufs sind ein Fehler."""
+    """Bestätigung (Spec v2 §8, Präzisierung des Nutzers vom 04.10.2026): ein Seed zählt nur, wenn alle drei
+    Kriterien zugleich gelten; bestätigt, wenn das in mindestens ⌈0,8·n⌉ Seeds so ist ("joint"). Die Zählungen je
+    Kriterium stehen zur Information daneben und entscheiden nichts. Ein Seed mit gescheiterter Prämisse erfüllt auch
+    Kriterium 2 und 3 nicht. Erlaubt sind nur mindestens 5 Seeds ab 500 (_check_confirmation_seeds)."""
     _check_confirmation_seeds(seeds)
     rs = _select(results, seeds)
     n = len(rs)
@@ -304,9 +304,9 @@ def report_markdown(ev: dict) -> str:
     out += _seed_values_table(ev)
     out += ["Prämisse umfasst P1 und P1b. Restanteil und Verschiebung gehören zu P1b. Übungs-Ontologie: vor dem Einsatz "
             "geöffnete Merkmale des jeweiligen Systems; sie zählen nie als geöffnet. δ: Mindestverbesserung aus den "
-            "Null-Strömen. Nutzbarkeit: mittlere Verbesserung (nats pro Schritt) des richtigen Merkmals (Arm B: „Farbe 0“, "
-            "Arm A: Farbe-0-Bit in Richtung der Aktion) bei der ersten richtigen Öffnung durch das jeweilige M3-System "
-            "unter `red`. „–“: im Ergebnis nicht enthalten oder keine richtige Öffnung.", ""]
+            "Null-Strömen. Nutzbarkeit: mittlere Verbesserung (nats pro Schritt) des richtigen Merkmals "
+            "(Arm B: „Farbe 0“, Arm A: Farbe-0-Bit in Richtung der Aktion) bei der ersten richtigen Öffnung durch das "
+            "jeweilige M3-System unter `red`. „–“: im Ergebnis nicht enthalten oder keine richtige Öffnung.", ""]
     out += [f"### Kennzahlen je System und Bedingung ({n_ok} Seeds mit erfüllter Prämisse)", ""]
     rows = []
     for name in SYSTEMS:
