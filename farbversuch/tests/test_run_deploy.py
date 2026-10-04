@@ -204,7 +204,7 @@ def test_run_seed_v2_schema():
 @pytest.mark.slow
 def test_non_finite_p1b_values_become_null_in_the_result(monkeypatch, tiny_phase1):
     # JSON hat kein NaN: nicht endliche Restanteil-/Verschiebungswerte stehen als null im Ergebnis
-    monkeypatch.setattr(run, "phase1", lambda seed, cfg: tiny_phase1)
+    monkeypatch.setattr(run, "train_phase1", lambda seed, cfg: tiny_phase1)
     monkeypatch.setattr(run, "premise_checks", lambda seed, cfg, p1: {
         "ok": False, "color_invariance": 1., "fwd_surprise": 1., "freq_surprise": 2.,
         "restanteil": float("nan"), "shift": float("inf")})
@@ -228,8 +228,33 @@ def test_run_seed_content():
 def test_premise_failure_stops_seed(capsys):
     r = run_seed(0, dataclasses.replace(TINY, min_invariance=1.01))
     assert r["premise"]["ok"] is False and r["conditions"] is None and r["p_global"] is None
+    # Entscheidung D2: ohne Prämisse keine Übungs-Ontologie, keine Null-Ströme, kein δ
+    assert r["practice"] is None and r["delta"] is None and r["calibration"] is None
+    assert json.loads(json.dumps(r, allow_nan=False)) == r
     lines = capsys.readouterr().err.splitlines()
     assert len(lines) == 2 and "Prämisse nicht erfüllt" in lines[1]          # keine Bedingungszeilen
+
+
+@pytest.mark.slow
+def test_failed_premise_skips_pre_open_null_streams_delta_and_p_global(monkeypatch):
+    # Entscheidung D2 (04.10.2026): P1 und P1b hängen nicht von O, δ oder den Null-Strömen ab und kommen zuerst
+    calls = []
+
+    def spy(name):
+        return lambda *a, **k: calls.append(name) or pytest.fail(f"{name} darf ohne Prämisse nicht laufen")
+    for name in ("pre_open_m3", "pre_open_s1", "calibrate_m3", "calibrate_cusum", "calibrate_delta", "find_p_global"):
+        monkeypatch.setattr(run, name, spy(name))
+    real_rollouts = run.routine_rollouts
+
+    def rollouts(routine, seed, tag, *a, **k):
+        if tag == run.NULL:
+            calls.append("NULL")
+            pytest.fail("keine Null-Ströme ohne Prämisse")
+        return real_rollouts(routine, seed, tag, *a, **k)
+    monkeypatch.setattr(run, "routine_rollouts", rollouts)
+    prep = prepare_seed(0, dataclasses.replace(TINY, min_invariance=1.01))
+    assert calls == [] and prep.premise["ok"] is False and prep.p_global is None
+    assert prep.p1.practice is None and prep.p1.deltas is None and prep.p1.m3_threshold is None
 
 
 @pytest.mark.slow
@@ -337,6 +362,7 @@ def test_staged_premise_failure(tmp_path):                     # Review Focus 5
     r = json.loads((tmp_path / "o" / "seed_0.json").read_text())
     assert r["premise"]["ok"] is False and r["conditions"] is None
     assert r["p_global"] is None and not any((tmp_path / "o" / ".work").glob("seed_0.*"))
+    assert r["practice"] is None and r["delta"] is None and r["calibration"] is None          # Entscheidung D2
 
 
 @pytest.mark.slow
@@ -381,6 +407,7 @@ def test_total_sec_is_preparation_plus_the_condition_times():       # Festlegung
     assert r["practice"]["M3-B"][0]["cand"] == 1 and r["delta"] == {"M3-B": .5}
     failed = result_json(_stub_prep(ok=False), None, {})
     assert failed["conditions"] is None and failed["p_global"] is None and failed["total_sec"] == 3.
+    assert failed["practice"] is None and failed["delta"] is None and failed["calibration"] is None   # D2
     assert json.loads(json.dumps(r, allow_nan=False)) == r
 
 
@@ -424,7 +451,7 @@ def test_prepare_job_recomputes_a_pickle_without_a_fingerprint(tmp_path, monkeyp
 
 
 def test_prepare_seed_stores_the_current_fingerprint(monkeypatch):
-    monkeypatch.setattr(run, "phase1", lambda seed, cfg: SimpleNamespace(sec=1.))
+    monkeypatch.setattr(run, "train_phase1", lambda seed, cfg: SimpleNamespace(sec=1.))
     monkeypatch.setattr(run, "premise_checks", lambda seed, cfg, p1: {"ok": False})
     assert prepare_seed(0, TINY).fingerprint == run.fingerprint()
 

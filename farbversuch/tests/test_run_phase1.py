@@ -86,6 +86,20 @@ def test_phase1_v2_tiny(tiny_phase1):
     assert json.loads(json.dumps([p.practice, p.deltas])) == [p.practice, p.deltas]
 
 
+@pytest.mark.slow
+def test_premise_needs_only_the_trained_part_of_phase1(tiny_phase1):
+    # Entscheidung D2: P1/P1b vor Übungs-Ontologie, Null-Strömen und δ; das Ergebnis hängt nicht davon ab
+    trained = run.train_phase1(0, TINY)
+    assert trained.practice is None and trained.deltas is None
+    assert (trained.m3_threshold, trained.cusum_k, trained.cusum_h) == (None, None, None)
+    assert premise_checks(0, TINY, trained) == premise_checks(0, TINY, tiny_phase1)
+    full = run.calibrate_phase1(0, TINY, trained)
+    assert full.practice == tiny_phase1.practice and full.deltas == tiny_phase1.deltas
+    assert (full.m3_threshold, full.cusum_k, full.cusum_h) == (tiny_phase1.m3_threshold, tiny_phase1.cusum_k,
+                                                               tiny_phase1.cusum_h)
+    assert full.sec >= trained.sec
+
+
 def _stacked(runs):
     return (np.concatenate([t.obs for _, t in runs]), np.concatenate([t.actions for _, t in runs]),
             np.concatenate([t.disps for _, t in runs]))

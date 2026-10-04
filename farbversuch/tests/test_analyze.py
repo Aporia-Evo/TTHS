@@ -745,6 +745,32 @@ def test_null_values_in_json_premise_show_dashes():            # nicht endlicher
     assert rows[0][col["Restanteil"]] == "–" and rows[0][col["Verschiebung"]] == "–"
 
 
+def premise_failed_result(seed):
+    """Ergebnis eines Seeds mit gescheiterter Prämisse seit Entscheidung D2: ohne Übungs-Ontologie, δ, Schwellen,
+    p_global und Bedingungen (alles null)."""
+    r = fake_result(seed, ok=False)
+    r.update(practice=None, delta=None, calibration=None, p_global=None, conditions=None)
+    return r
+
+
+def test_premise_failure_nulls_render_as_dashes_in_report_and_confirmation(tmp_path, capsys):
+    seeds = list(range(500, 505))
+    rs = [premise_failed_result(500)] + [fake_result(s) for s in seeds[1:]]
+    header, rows = seed_table(report_markdown(evaluate(rs, seeds)))
+    col = {h: i for i, h in enumerate(header)}
+    assert rows[0][col["Prämisse"]] == "nicht erfüllt"
+    for k in [f"Übungs-Ontologie {n}" for n in SYSTEMS] + ["δ M3-B", "δ M3-A", "Nutzbarkeit M3-B", "Nutzbarkeit M3-A"]:
+        assert rows[0][col[k]] == "–", k
+    ev = evaluate_confirmation(rs, seeds)
+    assert ev["per_seed"][500] == {"premise": False, "no_false_open": False, "red_correct": False, "all": False}
+    assert ev["joint"]["count"] == 4 and ev["confirmed"]
+    for r in rs:
+        (tmp_path / f"seed_{r['seed']}.json").write_text(json.dumps(r))
+    main(["--results", str(tmp_path), "--seeds", "500-504", "--confirm"])
+    out = capsys.readouterr().out
+    assert "| 500 | nein | nein | nein | nein |" in out and "Bestätigt." in out
+
+
 def test_expected_false_alarm_rate_line():
     def line(n_null, **cfg):
         rs = [fake_result(s) for s in (500, 501)]

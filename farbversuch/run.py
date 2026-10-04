@@ -13,7 +13,7 @@ import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -76,19 +76,21 @@ def teacher_data(seed: int, cfg: Config) -> tuple[np.ndarray, np.ndarray]:
 
 @dataclass
 class Phase1:
+    """Phase 1 in zwei Teilen: train_phase1 (Routine, Vorwärtsmodell, Übungspuffer; genug für die Prämisse) und
+    calibrate_phase1 (Übungs-Ontologie, Schwellen, δ). Die Felder der Kalibrierung sind None, solange sie fehlt."""
     routine: Routine
     forward: ForwardModel
     class_counts: np.ndarray        # (9,) Klassen der Vorwärts-Trainingsdaten
-    m3_threshold: float
-    cusum_k: float
-    cusum_h: float
     practice_obs: np.ndarray        # Übungspuffer: letzte buffer_size Schritte der Vorwärtsdaten
     practice_actions: np.ndarray
     practice_disps: np.ndarray
     practice_episodes: np.ndarray   # Episoden-ID (Index in den Vorwärts-Rollouts) je Schritt
-    practice: dict[str, list[int]]  # Übungs-Ontologie je System in cfg.systems
-    deltas: dict[str, float]        # Mindestverbesserung je M3-System in cfg.systems
-    sec: float
+    sec: float                      # Rechenzeit von Phase 1 bis hierher (ohne Prämissenprüfung)
+    m3_threshold: float | None = None
+    cusum_k: float | None = None
+    cusum_h: float | None = None
+    practice: dict[str, list[int]] | None = None    # Übungs-Ontologie je System in cfg.systems
+    deltas: dict[str, float] | None = None          # Mindestverbesserung je M3-System in cfg.systems
 
 
 def _stack(rollouts: list[tuple[Map, Traj]]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -148,7 +150,8 @@ def _calibrate_deltas(seed: int, cfg: Config, routine: Routine, null_buffers: Se
     return deltas
 
 
-def phase1(seed: int, cfg: Config) -> Phase1:
+def train_phase1(seed: int, cfg: Config) -> Phase1:
+    """Phase 1, Spec §4 Schritte 1–2: Routine, Vorwärtsmodell und Übungspuffer. Mehr braucht die Prämisse nicht."""
     t0 = time.perf_counter()
     X, A = teacher_data(seed, cfg)
     routine = train_routine(X, A, rng(seed, INIT), cfg.k, cfg.lr, cfg.epochs, cfg.wd, cfg.init_std)
@@ -161,8 +164,18 @@ def phase1(seed: int, cfg: Config) -> Phase1:
     class_counts = np.bincount(D, minlength=N_DISP)
 
     n = cfg.buffer_size
-    p_obs, p_actions, p_disps, p_episodes = X[-n:], A[-n:], D[-n:], episodes[-n:]
-    practice = _pre_open_practice(seed, cfg, forward, routine.encode(p_obs), p_obs, p_actions, p_disps)
+    return Phase1(routine=routine, forward=forward, class_counts=class_counts, practice_obs=X[-n:],
+                  practice_actions=A[-n:], practice_disps=D[-n:], practice_episodes=episodes[-n:],
+                  sec=time.perf_counter() - t0)
+
+
+def calibrate_phase1(seed: int, cfg: Config, p1: Phase1) -> Phase1:
+    """Phase 1, Spec §4 Schritte 3–4: Übungs-Ontologie je System, Null-Ströme, Schwellen und δ. Teuer; läuft nur
+    bei erfüllter Prämisse (Entscheidung D2 des Nutzers vom 04.10.2026)."""
+    t0 = time.perf_counter()
+    routine, forward, n = p1.routine, p1.forward, cfg.buffer_size
+    practice = _pre_open_practice(seed, cfg, forward, routine.encode(p1.practice_obs), p1.practice_obs,
+                                  p1.practice_actions, p1.practice_disps)
 
     null_streams, null_buffers = [], []
     for j in range(cfg.n_null_streams):
@@ -174,10 +187,13 @@ def phase1(seed: int, cfg: Config) -> Phase1:
                                 max_alarms=cfg.max_null_alarms)
     cusum_k, cusum_h = calibrate_cusum(null_streams, sd_factor=cfg.cusum_sd_factor, max_alarms=cfg.max_null_alarms)
     deltas = _calibrate_deltas(seed, cfg, routine, null_buffers, practice)
-    return Phase1(routine=routine, forward=forward, class_counts=class_counts, m3_threshold=m3_threshold,
-                  cusum_k=cusum_k, cusum_h=cusum_h, practice_obs=p_obs, practice_actions=p_actions,
-                  practice_disps=p_disps, practice_episodes=p_episodes, practice=practice, deltas=deltas,
-                  sec=time.perf_counter() - t0)
+    return replace(p1, m3_threshold=m3_threshold, cusum_k=cusum_k, cusum_h=cusum_h, practice=practice, deltas=deltas,
+                   sec=p1.sec + time.perf_counter() - t0)
+
+
+def phase1(seed: int, cfg: Config) -> Phase1:
+    """Die ganze Phase 1 ohne Prämissenprüfung (prepare_seed prüft die Prämisse zwischen den beiden Teilen)."""
+    return calibrate_phase1(seed, cfg, train_phase1(seed, cfg))
 
 
 def invariance_and_shift(seed: int, cfg: Config, routine: Routine) -> tuple[float, float]:
@@ -350,29 +366,40 @@ class Prepared:
 
 
 def prepare_seed(seed: int, cfg: Config) -> Prepared:
+    """Prämisse vor den teuren Schritten (Entscheidung D2): P1 und P1b hängen nicht von Übungs-Ontologie, δ oder den
+    Null-Strömen ab. Scheitert sie, entfallen Vor-Öffnen, Null-Ströme, Schwellen, δ und p_global."""
     t0 = time.perf_counter()
     _log(f"seed {seed} gestartet")
-    p1 = phase1(seed, cfg)
+    p1 = train_phase1(seed, cfg)
     premise = premise_checks(seed, cfg, p1)
+    p_global = None
+    if premise["ok"]:
+        p1 = calibrate_phase1(seed, cfg, p1)
     _log(f"seed {seed} Phase 1 fertig ({p1.sec:.0f} s), Prämisse {'ok' if premise['ok'] else 'nicht erfüllt'}")
-    p_global = find_p_global(seed, cfg, p1) if premise["ok"] else None
+    if premise["ok"]:
+        p_global = find_p_global(seed, cfg, p1)
     return Prepared(seed=int(seed), config=cfg.as_dict(), fingerprint=fingerprint(), p1=p1, premise=premise,
                     p_global=p_global, sec=time.perf_counter() - t0)
 
 
 def result_json(prep: Prepared, conditions: dict | None, cond_sec: dict[str, float]) -> dict:
-    """Ergebnis eines Seeds; conditions ist None bei nicht erfüllter Prämisse. total_sec = Vorbereitungszeit + Summe
-    der Bedingungszeiten (Festlegung 9), egal ob die Bedingungen nacheinander oder in getrennten Prozessen liefen."""
+    """Ergebnis eines Seeds. Bei nicht erfüllter Prämisse sind calibration, practice, delta, p_global und conditions
+    None (nicht berechnet, Entscheidung D2). total_sec = Vorbereitungszeit + Summe der Bedingungszeiten
+    (Festlegung 9), egal ob die Bedingungen nacheinander oder in getrennten Prozessen liefen."""
     p1, premise = prep.p1, prep.premise
+    ok = bool(premise["ok"])
     # JSON kennt kein NaN/Infinity: ein nicht endlicher Restanteil oder eine nicht endliche Verschiebung steht als null
     json_premise = {**premise, "restanteil": _finite_or_none(premise["restanteil"]),
                     "shift": _finite_or_none(premise["shift"])}
+    calibration = practice = delta = None
+    if ok:
+        calibration = {"m3_threshold": float(p1.m3_threshold), "cusum_k": float(p1.cusum_k),
+                       "cusum_h": float(p1.cusum_h)}
+        practice = {name: [{"cand": c, "name": candidate_name(name.split("-")[1], c)} for c in cands]
+                    for name, cands in p1.practice.items()}
+        delta = dict(p1.deltas)
     return {"seed": int(prep.seed), "config": prep.config, "env": env_block(), "premise": json_premise,
-            "calibration": {"m3_threshold": float(p1.m3_threshold), "cusum_k": float(p1.cusum_k),
-                            "cusum_h": float(p1.cusum_h)},
-            "practice": {name: [{"cand": c, "name": candidate_name(name.split("-")[1], c)} for c in cands]
-                         for name, cands in p1.practice.items()},
-            "delta": dict(p1.deltas),
+            "calibration": calibration, "practice": practice, "delta": delta,
             "p_global": prep.p_global, "conditions": conditions, "phase1_sec": float(p1.sec),
             "total_sec": float(prep.sec + sum(cond_sec.values()))}
 
