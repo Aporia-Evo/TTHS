@@ -7,6 +7,7 @@ import json
 import math
 import multiprocessing
 import os
+import shlex
 import pickle
 import platform
 import socket
@@ -14,6 +15,8 @@ import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -567,10 +570,23 @@ def _finish_job(task: tuple[int, Config, str]) -> int:
 
 
 def _stage(fn: Callable, tasks: Sequence, jobs: int) -> Iterator:
-    """Eine Stufe in einem frisch gestarteten Pool (auch bei jobs = 1); Ergebnisse in Fertigstellungsreihenfolge."""
-    if tasks:
-        with multiprocessing.get_context("spawn").Pool(max(1, jobs)) as pool:
-            yield from pool.imap_unordered(fn, tasks)
+    """Eine Stufe in einem frisch gestarteten Prozess-Pool (auch bei jobs = 1); Ergebnisse in Fertigstellungsreihenfolge.
+    Stirbt ein Arbeitsprozess (kill -9, Speichermangel), meldet der Pool BrokenProcessPool, statt zu hängen. Wirft eine
+    Aufgabe eine Ausnahme, startet keine weitere; laufende rechnen zu Ende (ihre Zwischenstände bleiben), dann geht die
+    Ausnahme weiter."""
+    if not tasks:
+        return
+    pool = ProcessPoolExecutor(max_workers=max(1, jobs), mp_context=multiprocessing.get_context("spawn"))
+    try:
+        for future in as_completed([pool.submit(fn, task) for task in tasks]):
+            yield future.result()
+    except Exception as e:
+        if not isinstance(e, BrokenProcessPool):
+            _log(f"Aufgabe fehlgeschlagen ({type(e).__name__}: {e}); laufende Aufgaben rechnen noch zu Ende, "
+                 f"dann bricht der Lauf ab")
+        raise
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -681,6 +697,12 @@ def main(argv: list[str] | None = None) -> None:
     lock = _acquire_lock(out)
     try:
         _drive(seeds, cfg, out, args.jobs)
+    except BrokenProcessPool:
+        command = shlex.join(["python", "-m", "farbversuch.run", *(sys.argv[1:] if argv is None else argv)])
+        raise SystemExit(f"Abbruch: Ein Arbeitsprozess wurde unerwartet beendet (z. B. vom System wegen Speichermangel "
+                         f"oder mit kill -9); seine Aufgabe ist verloren, die übrigen Arbeitsprozesse wurden beendet. "
+                         f"Fertige Zwischenstände in {out / '.work'} bleiben erhalten. Fortsetzen mit demselben Befehl, "
+                         f"das Log mit 2>> statt 2> anhängen:\n  {command}") from None
     finally:
         _release_lock(lock)
 

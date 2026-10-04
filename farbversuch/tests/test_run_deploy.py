@@ -5,9 +5,11 @@ import os
 import pickle
 import platform
 import re
+import signal
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -472,6 +474,44 @@ def test_cli_parallel_matches_serial(tmp_path, monkeypatch):
         return {k: strip(v) for k, v in x.items() if not k.endswith("_sec")} if isinstance(x, dict) else x
     par, ser = (json.loads((tmp_path / d / "seed_1.json").read_text()) for d in ("par", "ser"))
     assert strip(par) == strip(ser)
+
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+def _killing_prepare_job(task):
+    """Nur für Tests, ersetzt run._prepare_job im Unterprozess: Seed 1 beendet seinen Arbeitsprozess hart (wie der
+    OOM-Killer oder kill -9), Seed 0 meldet eine gescheiterte Prämisse."""
+    if task[0] == 1:
+        os.kill(os.getpid(), signal.SIGKILL)
+    return task[0], False
+
+
+def _failing_prepare_job(task):
+    """Nur für Tests: eine gewöhnliche Ausnahme in einem Arbeitsprozess."""
+    raise ValueError(f"Testfehler in Seed {task[0]}")
+
+
+def test_killed_worker_stops_main_quickly_with_resume_command(tmp_path):
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    out = tmp_path / "o"
+    args = ["--config", str(cfg), "--seeds", "0-1", "--out", str(out), "--jobs", "2"]
+    code = ("import sys, farbversuch.run as run, farbversuch.tests.test_run_deploy as t; "
+            "run._prepare_job = t._killing_prepare_job; run.main(sys.argv[1:])")
+    t0 = time.monotonic()
+    proc = subprocess.run([sys.executable, "-c", code, *args], cwd=REPO, capture_output=True, text=True, timeout=60)
+    assert time.monotonic() - t0 < 60 and proc.returncode == 1
+    assert "Arbeitsprozess" in proc.stderr and "unerwartet beendet" in proc.stderr
+    assert "python -m farbversuch.run " + " ".join(args) in proc.stderr and "2>>" in proc.stderr
+    assert proc.stdout == "" and not (out / ".lock").exists() and not list(out.glob("seed_*.json"))
+
+
+def test_ordinary_worker_exception_ends_main_with_that_exception(tmp_path, monkeypatch):
+    cfg = tmp_path / "c.json"; TINY.to_json(cfg)
+    monkeypatch.setattr(run, "_prepare_job", _failing_prepare_job)
+    with pytest.raises(ValueError, match="Testfehler in Seed"):
+        main(["--config", str(cfg), "--seeds", "0-1", "--out", str(tmp_path / "o"), "--jobs", "2"])
+    assert not (tmp_path / "o" / ".lock").exists()
 
 
 def _in_fresh_process(monkeypatch, fn, *args):
