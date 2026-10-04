@@ -667,7 +667,8 @@ def test_evaluate_carries_per_seed_values():
     assert first["premise_ok"] is True and first["color_invariance"] == 0.99 and first["restanteil"] == 0.05
     assert first["shift"] == 0.1 and first["delta"] == {"M3-B": 0.002, "M3-A": 0.003}
     assert first["practice"]["M3-B"] == ["Wand"] and first["practice"]["S1-A"] == ["bit3&a0", "bit2&a1"]
-    assert [row["usability"] for row in ev["seeds"]] == [0.0123, None, None]
+    assert [row["usability"] for row in ev["seeds"]] == [{"M3-B": 0.0123, "M3-A": None}, {"M3-B": None, "M3-A": None},
+                                                        None]                      # gescheiterte Prämisse: keine Bedingungen
     assert ev["seeds"][2]["premise_ok"] is False and ev["seeds"][2]["practice"] == first["practice"]   # steht oben im Ergebnis
     assert ev["n_null_streams"] == 20
 
@@ -678,7 +679,8 @@ def test_report_per_seed_table_values():
     header, rows = seed_table(report_markdown(evaluate(rs, seeds)))
     assert header[0] == "Seed" and "Farbinvarianz" in header and "Restanteil" in header and "Verschiebung" in header
     assert [h for h in header if h.startswith("Übungs-Ontologie")] == [f"Übungs-Ontologie {n}" for n in SYSTEMS]
-    assert "δ M3-B" in header and "δ M3-A" in header and "Nutzbarkeit" in header
+    assert "δ M3-B" in header and "δ M3-A" in header
+    assert [h for h in header if h.startswith("Nutzbarkeit")] == ["Nutzbarkeit M3-B", "Nutzbarkeit M3-A"]
     col = {h: i for i, h in enumerate(header)}
     assert rows[0][col["Seed"]] == "500" and rows[0][col["Prämisse"]] == "erfüllt"
     assert rows[0][col["Farbinvarianz"]] == "0.990" and rows[0][col["Restanteil"]] == "0.050"
@@ -686,9 +688,24 @@ def test_report_per_seed_table_values():
     assert rows[0][col["Übungs-Ontologie M3-B"]] == "Wand" and rows[0][col["Übungs-Ontologie S1-A"]] == "bit3&a0, bit2&a1"
     assert rows[0][col["Übungs-Ontologie M3-A"]] == "keine"           # leer ist nicht "unbekannt"
     assert rows[0][col["δ M3-B"]] == "0.0020" and rows[0][col["δ M3-A"]] == "0.0030"
-    assert rows[0][col["Nutzbarkeit"]] == "0.0123"
-    assert rows[1][col["Nutzbarkeit"]] == "–"                       # M3-B hat in red nichts geöffnet
-    assert rows[2][col["Prämisse"]] == "nicht erfüllt" and rows[2][col["Nutzbarkeit"]] == "–"
+    assert rows[0][col["Nutzbarkeit M3-B"]] == "0.0123" and rows[0][col["Nutzbarkeit M3-A"]] == "–"
+    assert rows[1][col["Nutzbarkeit M3-B"]] == "–"                  # M3-B hat in red nichts geöffnet
+    assert rows[2][col["Prämisse"]] == "nicht erfüllt" and rows[2][col["Nutzbarkeit M3-B"]] == "–"
+
+
+def test_usability_is_reported_for_both_m3_systems():
+    # Spec §6 "je Seed und System": auch M3-A, Gewinn der ersten richtigen Öffnung (Farbe-0-Bit in Aktionsrichtung)
+    seeds = [500, 501]
+    rs = [fake_result(500, gain=0.0123), fake_result(501, gain=0.02)]
+    a_wrong = 1 * 298 + obs_index(CH_COLOR[C_SPECIAL], -1, 0)            # Farbe-0-Bit oben, aber Aktion unten
+    sys_variant(rs[0], "M3-A", "red", sysres(110, [(a_wrong, 115, 0.9), (A_RED, 140, 0.031), (A_RED, 130, 0.027)]))
+    sys_variant(rs[1], "M3-A", "red", sysres(110, [(A_RED, 90, 0.5)]))        # nur vor dem Wechsel: keine Nutzbarkeit
+    ev = evaluate(rs, seeds)
+    assert [row["usability"] for row in ev["seeds"]] == [{"M3-B": 0.0123, "M3-A": 0.027}, {"M3-B": 0.02, "M3-A": None}]
+    header, rows = seed_table(report_markdown(ev))
+    col = {h: i for i, h in enumerate(header)}
+    assert [rows[i][col["Nutzbarkeit M3-A"]] for i in (0, 1)] == ["0.0270", "–"]
+    assert [rows[i][col["Nutzbarkeit M3-B"]] for i in (0, 1)] == ["0.0123", "0.0200"]
 
 
 def legacy_result(seed, **kw):
@@ -713,7 +730,7 @@ def test_old_results_without_v2_keys_show_dashes_and_do_not_crash():
     header, rows = seed_table(md)
     col = {h: i for i, h in enumerate(header)}
     assert len(rows) == 10
-    for k in ("Restanteil", "Verschiebung", "δ M3-B", "δ M3-A", "Nutzbarkeit") + tuple(f"Übungs-Ontologie {n}" for n in SYSTEMS):
+    for k in ("Restanteil", "Verschiebung", "δ M3-B", "δ M3-A", "Nutzbarkeit M3-B", "Nutzbarkeit M3-A") + tuple(f"Übungs-Ontologie {n}" for n in SYSTEMS):
         assert {r[col[k]] for r in rows} == {"–"}, k
     assert rows[0][col["Farbinvarianz"]] == "0.990"                 # was es gab, bleibt sichtbar
     assert "Fehlalarmrate" in md and "4,8" not in md                # Anzahl der Null-Ströme unbekannt

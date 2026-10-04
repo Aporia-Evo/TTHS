@@ -13,6 +13,7 @@ from farbversuch.world import CH_COLOR, C_SPECIAL, DELTAS, HALF, OBS_DIM, obs_in
 P2_MIN, P3_MIN = 9, 9
 ABORT_RED_MIN, ABORT_GLOBAL_MAX = 5, 3
 MAIN_SEEDS = tuple(range(400, 410))      # nur für diese Seeds gelten die vorregistrierten Schwellen und Urteile
+M3_SYSTEMS = tuple(n for n in SYSTEMS if n.startswith("M3"))
 
 
 def is_correct(arm: str, cand: int) -> bool:
@@ -110,25 +111,26 @@ def _select(results: Sequence[dict], seeds: Sequence[int]) -> list[dict]:
     return rs
 
 
-def _m3b_red(r: dict) -> dict | None:
-    """Kennzahlen von M3-B unter `red`; None bei gescheiterter Prämisse (dann gibt es keine Bedingungen)."""
+def _m3_red(r: dict, name: str = "M3-B") -> dict | None:
+    """Kennzahlen eines M3-Systems unter `red`; None bei gescheiterter Prämisse (dann gibt es keine Bedingungen)."""
     if not r.get("conditions"):
         return None
     cfg = r["config"]
     switch = cfg["switch_episode"]
-    return stream_metrics(r["conditions"]["red"]["M3-B"], "red", "B", switch, cfg["n_deploy_episodes"] - switch)
+    return stream_metrics(r["conditions"]["red"][name], "red", name[-1], switch, cfg["n_deploy_episodes"] - switch)
 
 
 def _seed_row(r: dict) -> dict:
     """Werte je Seed für den Bericht (Spec §6). Was ein altes Ergebnis nicht enthält, ist None."""
     premise = r["premise"]
     practice = r.get("practice")
-    m = _m3b_red(r)
     return {"seed": r["seed"], "premise_ok": bool(premise["ok"]),
             "color_invariance": premise.get("color_invariance"), "restanteil": premise.get("restanteil"),
             "shift": premise.get("shift"),
             "practice": None if practice is None else {n: [e["name"] for e in es] for n, es in practice.items()},
-            "delta": r.get("delta"), "usability": None if m is None else m["usability"]}
+            "delta": r.get("delta"),
+            # Nutzbarkeit je M3-System (Spec §6); None ohne Bedingungen
+            "usability": None if not r.get("conditions") else {n: _m3_red(r, n)["usability"] for n in M3_SYSTEMS}}
 
 
 def evaluate(results: Sequence[dict], seeds: Sequence[int]) -> dict:
@@ -211,7 +213,7 @@ def evaluate_confirmation(results: Sequence[dict], seeds: Sequence[int]) -> dict
         ok = bool(r["premise"]["ok"])
         # geöffnet = nur Wiederöffnungen; die Übungs-Ontologie steht nicht in "opened"
         quiet = ok and all(not r["conditions"][c]["M3-B"]["opened"] for c in ("none", "global"))
-        row = {"premise": ok, "no_false_open": quiet, "red_correct": ok and bool(_m3b_red(r)["correct"])}
+        row = {"premise": ok, "no_false_open": quiet, "red_correct": ok and bool(_m3_red(r)["correct"])}
         per_seed[r["seed"]] = {**row, "all": all(row.values())}
 
     def criterion(key: str) -> dict:
@@ -247,16 +249,16 @@ def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> list[str]:
 
 
 def _seed_values_table(ev: dict) -> list[str]:
-    m3 = [n for n in SYSTEMS if n.startswith("M3")]
     header = (["Seed", "Prämisse", "Farbinvarianz", "Restanteil", "Verschiebung"]
-              + [f"Übungs-Ontologie {n}" for n in SYSTEMS] + [f"δ {n}" for n in m3] + ["Nutzbarkeit"])
+              + [f"Übungs-Ontologie {n}" for n in SYSTEMS] + [f"δ {n}" for n in M3_SYSTEMS]
+              + [f"Nutzbarkeit {n}" for n in M3_SYSTEMS])
     rows = []
     for row in ev["seeds"]:
-        practice, delta = row["practice"] or {}, row["delta"] or {}
+        practice, delta, usability = row["practice"] or {}, row["delta"] or {}, row["usability"] or {}
         rows.append([str(row["seed"]), _verdict(row["premise_ok"]), _f(row["color_invariance"], 3),
                      _f(row["restanteil"], 3), _f(row["shift"], 3)]
                     + ["–" if n not in practice else ", ".join(practice[n]) or "keine" for n in SYSTEMS]
-                    + [_f(delta.get(n), 4) for n in m3] + [_f(row["usability"], 4)])
+                    + [_f(delta.get(n), 4) for n in M3_SYSTEMS] + [_f(usability.get(n), 4) for n in M3_SYSTEMS])
     return _table(header, rows)
 
 
@@ -299,8 +301,9 @@ def report_markdown(ev: dict) -> str:
     out += _seed_values_table(ev)
     out += ["Prämisse umfasst P1 und P1b. Restanteil und Verschiebung gehören zu P1b. Übungs-Ontologie: vor dem Einsatz "
             "geöffnete Merkmale des jeweiligen Systems; sie zählen nie als geöffnet. δ: Mindestverbesserung aus den "
-            "Null-Strömen. Nutzbarkeit: mittlere Verbesserung (nats pro Schritt) des Merkmals „Farbe 0“ bei der ersten "
-            "richtigen Öffnung durch M3-B unter `red`. „–“: im Ergebnis nicht enthalten oder keine richtige Öffnung.", ""]
+            "Null-Strömen. Nutzbarkeit: mittlere Verbesserung (nats pro Schritt) des richtigen Merkmals (Arm B: „Farbe 0“, "
+            "Arm A: Farbe-0-Bit in Richtung der Aktion) bei der ersten richtigen Öffnung durch das jeweilige M3-System "
+            "unter `red`. „–“: im Ergebnis nicht enthalten oder keine richtige Öffnung.", ""]
     out += [f"### Kennzahlen je System und Bedingung ({n_ok} Seeds mit erfüllter Prämisse)", ""]
     rows = []
     for name in SYSTEMS:
