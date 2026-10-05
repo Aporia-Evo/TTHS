@@ -219,3 +219,34 @@ Ergebnis:
    - Nach den Container-Neustarts meldet der Container am 05.10.2026 „@ 2.10GHz“.
    - Der Fingerabdruck enthält die CPU. Ein Hauptlauf, der nach einem Neustart auf anderer Hardware weiterläuft, rechnet seine Zwischenstände deshalb neu, statt Ergebnisse zu mischen. Seine Laufzeit kann dadurch deutlich steigen.
    - Der Hauptlauf muss vollständig auf einer Maschine laufen (Spec v2 §8.5).
+
+## Einfrieren (05.10.2026, 20:55)
+
+Freigegeben durch den Nutzer am 05.10.2026: einfrieren und Hauptlauf 400–409 in diesem Container starten.
+
+- **Code-Stand:** `9153086`. Arbeitsstand sauber, `python -m pytest -q -m "not slow"`: 333 passed, 29 deselected.
+- **Befehl:** `python -m farbversuch.freeze write --config farbversuch/pilot_config.json`. Danach meldet `freeze verify` „OK“.
+- **Eingefroren:**
+  - `frozen_config.json`, bytegleich mit `pilot_config.json`;
+  - `freeze.sha256` mit 35 Einträgen: 32 `*.py`-Dateien einschließlich Tests, dazu `requirements.txt`, `pytest.ini` und `frozen_config.json`. SHA-256 dieser Datei: `30c2657b69b58657aeeb6905d803831e9168258552db9f70ecff692c9c56fb45`.
+- **Umgebung und Fingerabdruck** auf der Maschine des Hauptlaufs:
+
+```json
+{
+ "env": {
+  "OMP_NUM_THREADS": "1",
+  "OPENBLAS_NUM_THREADS": "1",
+  "MKL_NUM_THREADS": "1",
+  "VECLIB_MAXIMUM_THREADS": "1",
+  "BLIS_NUM_THREADS": "1",
+  "numpy": "2.4.6",
+  "blas": "scipy-openblas 0.3.31.188.0",
+  "python": "3.11.15",
+  "machine": "x86_64",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz"
+ },
+ "fingerprint": "51ddfec05d28d488d854f04f622a16fff63660a889430e865880d8042b302c68"
+}
+```
+
+Der Fingerabdruck ist identisch mit dem der Bestätigung 510–514 (`51ddfec…`). Code und Umgebung sind also dieselben wie dort. Die Ergebnisdateien des Hauptlaufs tragen ihn je Seed.
