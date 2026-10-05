@@ -117,3 +117,26 @@ Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen See
 **Freigabe:** `n_teacher_episodes` gehört zu den Größen, die nur nach Rückfrage geändert werden; der Nutzer hat es freigegeben. Die Übernahme und die Bestätigung auf den Seeds 510–514 hat der Nutzer am 05.10.2026 freigegeben.
 
 **Offener Punkt (Idee des Nutzers):** Für eine Invarianz von 1,0 fehlt dem Modell ein Sparsamkeitsdruck, zum Beispiel Gruppen-Lasso je Eingabebit. Das wäre eine Codeänderung und ist nicht Teil dieser Konfiguration.
+
+## Bestätigung 510–514 (05.10.2026, Konfiguration aus Abschnitt 2)
+
+**Lauf:** `--jobs 4`, Start 09:24:22, Ende 12:51:37.
+- Der Container wurde zweimal neu gestartet, um etwa 11:00 und etwa 11:25.
+- Fortgesetzt wurde jeweils mit demselben Befehl. Vorbereitung und fertige Bedingungen wurden übernommen, nur laufende Bedingungen wurden neu gerechnet.
+- Die Ergebnisse hängen nicht von der Laufreihenfolge ab.
+
+**Ergebnis: bestätigt.** 4 von 5 Seeds erfüllen alle drei Kriterien gleichzeitig, nötig sind 4.
+- **Prämisse:** auf allen 5 Seeds erfüllt (Invarianz 0,964–0,984, Restanteil ≤ 0,056, Verschiebung ≤ 0,083).
+- **M3-B unter `red`:** öffnet auf allen 5 Seeds „Farbe 0“ nach dem Wechsel, bei 110–140 bzw. 10–40 Episoden danach. Zusätzlich gibt es 2 Fehlzuschreibungen: „Ziel“ bei 512 und 513.
+- **M3-B unter `none`:** auf keinem Seed ein Fehlalarm.
+- **M3-B unter `global`:**
+  - Auf 4 Seeds bemerkt M3-B die Änderung und öffnet nichts.
+  - Bei 510 öffnet M3-B „Farbe 0“ bei Episode 110, eine Fehlöffnung. Damit verfehlt 510 das Kriterium 2.
+- **M3-B unter `walls`:** bemerkt auf 2 Seeds. Bei 512 öffnet M3-B „Farbe 3“ und „Farbe 2“, das ist eine Fehlzuschreibung. Für die Bestätigung zählt `walls` nicht.
+- **Vergleich (explorativ):**
+  - M3-A schreibt `red` auf 3/5 Seeds richtig zu, im Mittel erst nach 144 Episoden, und öffnet unter `global` 6 Merkmale.
+  - S1-B und S1-A haben deutlich mehr Fehlzuschreibungen: unter `red` 6 bzw. 10.
+- **p_global:** 0,227–0,269, überall hit und bracketed.
+- **Laufzeit je Seed:** Phase 1 1764–1813 s, Rechenzeit gesamt 4035–6735 s.
+
+Details: `results/confirm_510_report.md`. Die Seeds 510–514 sind verbraucht. Wie es weitergeht (zusätzliche Seeds, Einfrieren, Hauptlauf), entscheidet der Nutzer.
