@@ -4,6 +4,8 @@ Jede Änderung an `farbversuch/pilot_config.json` mit Grund und den Messwerten d
 
 Maschine aller Läufe: Cloud-Container, 4 Kerne, Python 3.11.15, numpy 2.4.6, BLAS-Threads 1.
 
+**Begriff Trainingsgenauigkeit:** Anteil der Lehrer-Trainingsdaten, auf denen die Routine die Lehreraktion wählt. Gemessen wird auf denselben Daten, mit denen sie trainiert wurde. Es ist keine Test- oder Einsatzgenauigkeit. Frühere Fassungen nannten das „Trefferquote auf den Lehrerdaten“.
+
 ## 1. `wd` 0,001 → 0,01 (04.10.2026)
 
 **Ausgangslauf:** Pilot Seed 0 mit den Standardwerten (`Config()`), Start 07:15:34, Ende nach 83 s. Code-Stand 352092c. Die Prämisse ist nicht erfüllt, deshalb gab es keine Kalibrierung und keine Bedingungen (Entscheidung D2).
@@ -19,7 +21,7 @@ Maschine aller Läufe: Cloud-Container, 4 Kerne, Python 3.11.15, numpy 2.4.6, BL
 
 **Vorprüfung:** explorativ, Seed 0, außerhalb des Ergebnisordners. Gerechnet wurden `train_phase1` und `premise_checks` mit je einer geänderten Größe; alles andere ist Standard.
 
-| Variante | Farbinvarianz | Restanteil | Verschiebung | Vorwärts / Häufigkeit | Treffer auf Lehrerdaten | Prämisse |
+| Variante | Farbinvarianz | Restanteil | Verschiebung | Vorwärts / Häufigkeit | Trainingsgenauigkeit | Prämisse |
 |---|---|---|---|---|---|---|
 | wd 0,003 | 0,9319 | 0,0817 | 0,1508 | 0,5803 / 1,5729 | 0,8991 | nein |
 | wd 0,01 | 0,9797 | −0,0364 | 0,1035 | 0,6182 / 1,3688 | 0,9128 | ja |
@@ -66,18 +68,18 @@ Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen See
 
 ## 2. Routine-Training per Evolution: wd, lr, epochs, init_std, n_teacher_episodes (04./05.10.2026)
 
-**Grund:** P1 scheiterte in der Bestätigung 500–504 an der Farbinvarianz. Sie lag dort zwischen 0,939 und 0,980. Dazu kam ein instabiles Training: Die Trefferquote auf den Lehrerdaten schwankte zwischen Seeds und benachbarten Einstellungen von 0,65 bis 0,91.
+**Grund:** P1 scheiterte in der Bestätigung 500–504 an der Farbinvarianz. Sie lag dort zwischen 0,939 und 0,980. Dazu kam ein instabiles Training: Die Trainingsgenauigkeit schwankte zwischen Seeds und benachbarten Einstellungen von 0,65 bis 0,91.
 
 **Entwicklungsdaten:** die verbrauchten Seeds 0 und 500–504. Für eine Bestätigung zählen sie nicht mehr.
 
 **Auswahlregel, vor dem Ansehen der Ergebnisse festgelegt:** Auf allen 6 Seeds muss gelten:
 - Farbinvarianz ≥ 0,96, also 0,01 Abstand zur Schwelle;
-- Trefferquote der Routine auf den Lehrerdaten ≥ 0,90;
+- Trainingsgenauigkeit der Routine ≥ 0,90;
 - P1b erfüllt.
 
 **Schritt 1, Raster** (nur die Prämisse, alle 6 Seeds; Daten in `results/evo/screening_wd_teacher.jsonl`). Keine Variante erfüllt die Regel.
 
-| Variante | Prämisse | Invarianz min | Trefferquote min |
+| Variante | Prämisse | Invarianz min | Trainingsgenauigkeit min |
 |---|---|---|---|
 | wd 0,015 | 2/6 | 0,939 | 0,65 |
 | wd 0,02 | 4/6 | 0,917 | 0,70 |
@@ -87,7 +89,7 @@ Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen See
 **Schritt 2, Evolution:** Vorschlag des Nutzers, freigegeben mit „wenn man schon nah dran ist lohnt evolvieren oft“. Skript, Log und alle Kandidaten liegen in `results/evo/`.
 - **Verfahren:** (2+4)-Evolution, höchstens 8 Generationen.
 - **Mutation:** log-normal auf `wd`, `lr`, `epochs` und `init_std`. `n_teacher_episodes` wechselt mit Wahrscheinlichkeit 0,3 zwischen 4000, 6000 und 8000.
-- **Fitness (vorab festgelegt):** min über die 6 Seeds von min(Invarianz − 0,96; Trefferquote − 0,90). Ziel war ≥ +0,005.
+- **Fitness (vorab festgelegt):** min über die 6 Seeds von min(Invarianz − 0,96; Trainingsgenauigkeit − 0,90). Ziel war ≥ +0,005.
 - **Start:** die bisherige Konfiguration und n_teacher 8000 + wd 0,015.
 - **Verlauf der besten Fitness:**
 
@@ -101,7 +103,7 @@ Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen See
 
 **Volle Prämissenprüfung des Siegers auf den 6 Entwicklungs-Seeds:**
 
-| Seed | Invarianz | Trefferquote | Vorwärts / Häufigkeit | Restanteil | Verschiebung | Prämisse |
+| Seed | Invarianz | Trainingsgenauigkeit | Vorwärts / Häufigkeit | Restanteil | Verschiebung | Prämisse |
 |---|---|---|---|---|---|---|
 | 0 | 0,974 | 0,909 | 0,634 / 1,382 | −0,017 | 0,087 | erfüllt |
 | 500 | 0,977 | 0,910 | 0,717 / 1,415 | −0,040 | 0,074 | erfüllt |
@@ -110,7 +112,7 @@ Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen See
 | 503 | 0,967 | 0,912 | 0,603 / 1,436 | −0,025 | 0,114 | erfüllt |
 | 504 | 0,975 | 0,907 | 0,639 / 1,400 | 0,046 | 0,077 | erfüllt |
 
-**Deutung (Annahme):** Die Lernrate 0,5 war zu groß für Full-Batch-Training. Mit lr ≈ 0,15 und 500 Epochen konvergiert das Training gleichmäßig, die Trefferquote liegt auf allen Seeds bei ≈ 0,91. Doppelt so viele Lehrerdaten verringern zufällige Zusammenhänge zwischen Farbe und Aktion, der stärkere Weight Decay drückt die Farbgewichte.
+**Deutung (Annahme):** Die Lernrate 0,5 war zu groß für Full-Batch-Training. Mit lr ≈ 0,15 und 500 Epochen konvergiert das Training gleichmäßig, die Trainingsgenauigkeit liegt auf allen Seeds bei ≈ 0,91. Doppelt so viele Lehrerdaten verringern zufällige Zusammenhänge zwischen Farbe und Aktion, der stärkere Weight Decay drückt die Farbgewichte.
 
 **Kopplung:** Alle fünf Größen wirken nur auf das Training der Routine, nicht auf das Erklären und nicht auf die P1b-Messung.
 
@@ -127,16 +129,93 @@ Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen See
 
 **Ergebnis: bestätigt.** 4 von 5 Seeds erfüllen alle drei Kriterien gleichzeitig, nötig sind 4.
 - **Prämisse:** auf allen 5 Seeds erfüllt (Invarianz 0,964–0,984, Restanteil ≤ 0,056, Verschiebung ≤ 0,083).
-- **M3-B unter `red`:** öffnet auf allen 5 Seeds „Farbe 0“ nach dem Wechsel, bei 110–140 bzw. 10–40 Episoden danach. Zusätzlich gibt es 2 Fehlzuschreibungen: „Ziel“ bei 512 und 513.
+- **M3-B unter `red`:** öffnet auf allen 5 Seeds „Farbe 0“ nach dem Wechsel, bei Episode 130, 140, 140, 130 und 130 (Seeds 510–514). Das sind 30–40 Episoden nach dem Wechsel, im Mittel 34. Zusätzlich öffnet M3-B zweimal „Ziel“ (512 und 513); das sind nach §6 Fehlzuschreibungen. (Korrigiert am 05.10.2026; vorher stand hier fälschlich „110–140 bzw. 10–40“.)
 - **M3-B unter `none`:** auf keinem Seed ein Fehlalarm.
 - **M3-B unter `global`:**
   - Auf 4 Seeds bemerkt M3-B die Änderung und öffnet nichts.
   - Bei 510 öffnet M3-B „Farbe 0“ bei Episode 110, eine Fehlöffnung. Damit verfehlt 510 das Kriterium 2.
 - **M3-B unter `walls`:** bemerkt auf 2 Seeds. Bei 512 öffnet M3-B „Farbe 3“ und „Farbe 2“, das ist eine Fehlzuschreibung. Für die Bestätigung zählt `walls` nicht.
-- **Vergleich (explorativ):**
-  - M3-A schreibt `red` auf 3/5 Seeds richtig zu, im Mittel erst nach 144 Episoden, und öffnet unter `global` 6 Merkmale.
-  - S1-B und S1-A haben deutlich mehr Fehlzuschreibungen: unter `red` 6 bzw. 10.
+- **Vergleich (explorativ, korrigiert am 05.10.2026):**
+  - **M3-A, Zuschreibung `red`:** 3/5 Treffer, alle drei bei Latenz 40 (Seeds 511, 512, 514). Der berichtete Mittelwert 144 enthält die zwei Nichttreffer (510, 513), zensiert am Horizont 300.
+  - **Fehlzuschreibungen insgesamt nach §6:** M3-B 5, M3-A 2. Außerhalb von `red` zählen dabei nur Farbmerkmale.
+    - M3-B: 2 unter `red`, 1 unter `global`, 2 unter `walls`.
+    - M3-A: 1 unter `red`, 1 unter `walls`.
+    - M3-A öffnet unter `global` zusätzlich 6 Merkmale, die keine Farbmerkmale sind. Die Auswertung führt sie unter „Geöffnet“, nicht als Fehlzuschreibungen. Für P3, das nur M3-B betrifft, spielt das keine Rolle.
+    - Eine pauschale Fehlerüberlegenheit von M3-B lässt sich daraus nicht ableiten.
+  - **S1-B, Zuschreibung `red`:** ebenfalls 5/5 Treffer, mittlere Latenz 54, dazu 6 Fehlzuschreibungen unter `red`. S1-A: 3/5 Treffer, 10 Fehlzuschreibungen unter `red`. P5 misst die Trefferquote, nicht die Präzision aller Öffnungen.
 - **p_global:** 0,227–0,269, überall hit und bracketed.
 - **Laufzeit je Seed:** Phase 1 1764–1813 s, Rechenzeit gesamt 4035–6735 s.
 
 Details: `results/confirm_510_report.md`. Die Seeds 510–514 sind verbraucht. Wie es weitergeht (zusätzliche Seeds, Einfrieren, Hauptlauf), entscheidet der Nutzer.
+
+**Einordnung:** „Bestätigt“ bezieht sich hier nur auf die vorab festgelegte gemeinsame 4/5-Regel der Bestätigung (Spec v2 §8). Die Vorhersagen P2–P5 sind nicht geprüft. Sie bleiben dem Hauptlauf auf den Seeds 400–409 vorbehalten.
+
+## Entwicklungsgeschichte im Überblick (Stand 05.10.2026)
+
+Alle ergebnisgeleiteten Entscheidungen vor dem Einfrieren, in zeitlicher Reihenfolge:
+
+1. **v1 → v2 (Spec v2, Anhang A):** Übungs-Ontologie, Residualisieren, δ, Kalibrierung über den größten Null-Wert und P1b wurden nach einer explorativen Diagnose auf Seed 0 eingeführt.
+   - Dazu gehört auch eine **ergebnisgeleitete Wahl:** Die Kreuzvalidierung bleibt nach Zeilen, nicht nach Episoden. In der Diagnose brachte die Teilung nach Episoden mehr Fehlöffnungen (2/5 gegenüber 0/5 bei `global`) und weniger Trennschärfe.
+   - Die Abhängigkeit der Zeilen ist damit eine berichtete Grenze.
+2. **Pilot Seed 0:** `wd` 0,001 → 0,01, nach einer Vorprüfung mit 4 Varianten auf Seed 0 (Abschnitt 1).
+3. **Bestätigung 500–504:** nicht bestätigt, Prämisse nur 2/5.
+4. **Raster und Evolution (Abschnitt 2):** auf den Entwicklungs-Seeds 0 und 500–504.
+   - Raster: 4 Varianten.
+   - Evolution: 34 bewertete Kandidaten über `wd`, `lr`, `epochs`, `init_std` und `n_teacher_episodes`.
+   - Auswahlregel und Fitness standen vor der Suche fest; Kriterien waren Farbinvarianz und Trainingsgenauigkeit.
+5. **Bestätigung 510–514:** auf frischen Seeds, mit der Sieger-Konfiguration ohne weitere Änderung. Die gemeinsame 4/5-Regel ist erfüllt.
+
+Auf den Seeds 0 und 500–504 wurde ausgewählt. Sie sind Entwicklungsdaten. Nur 510–514 sind eine unabhängige Prüfung der gewählten Konfiguration, und auch das nur für die Bestätigungsregel, nicht für P2–P5.
+
+## Review-Nachtrag 05.10.2026: Vorbereitung des Einfrierens
+
+**Entscheidung des Nutzers (05.10.2026):** Die bestehende Methode wird eingefroren, ohne weitere Bestätigungsrunde (Entscheidung A).
+- **Unverändert:** Algorithmen, Hyperparameter (`pilot_config.json`), Schwellen und Vorhersagen.
+- **Präzisierungen:** in Spec v2, Anhang B. Sie ändern keine Regel.
+
+**Geprüfte Angaben** (gegen `results/confirm_510/seed_*.json`, `analyze.stream_metrics`, `run.py` und `monitor.py`):
+- **M3-B unter `red`:** öffnet „Farbe 0“ bei Episode 130, 140, 140, 130 und 130, also 30–40 Episoden nach dem Wechsel, im Mittel 34. Die Korrektur steht oben.
+- **M3-A unter `red`:** 3 Treffer, je bei Latenz 40. Der Mittelwert 144 enthält 2 Nichttreffer am Horizont 300.
+- **Fehlzuschreibungen insgesamt:** M3-A 2, M3-B 5. S1-B trifft unter `red` ebenfalls 5/5.
+- **Kalibrierung:**
+  - Das Bemerken ist über ganze Null-Ströme kalibriert, δ über einen Endpuffer (`buffer_size` Schritte) je Null-Strom. Eine Gesamtrate falscher Öffnungen folgt daraus nicht.
+  - δ = 0 entsteht regelgemäß, wenn auf keinem der 20 Null-Puffer ein Kandidat in allen Teilungen gewinnt. Das war bei M3-B auf den Seeds 511 und 512 der Fall.
+- **Fehlöffnung „Farbe 0“ unter `global`, Seed 510:**
+  - Sie geschah beim ersten Erklären, Episode 110, mit Gewinn 0,0033 bei δ = 0,0019.
+  - Wiederholtes Testen oder δ = 0 sind dafür keine nachgewiesene Ursache.
+  - Grenzen sind die Zeilenabhängigkeit der Kreuzvalidierung und die adaptiven Zusatzöffnungen, deren Fehlerniveau nicht gesondert kalibriert ist.
+
+**Bisherige Nutzung der Hauptlauf-Seeds 400–409:** Geprüft wurden die verfügbaren Aufzeichnungen:
+- die Ergebnisordner im Repo (`results/pilot`, `confirm`, `confirm_510`, `evo`; kein `results/main`);
+- die Git-Historie des Branches;
+- die Befehlsprotokolle dieser Arbeitssitzung und aller ihrer Teilagenten.
+
+Ergebnis:
+- **Keine Experiment- oder Prämissenrechnung mit 400–409 gefunden.**
+- **Testläufe:** echte Läufe verwenden die Seeds 0, 1 und 3 mit der Mini-Konfiguration.
+- **Auswertungstests:** Sie nutzen 400–409 nur als Nummern synthetischer Ergebnisdateien.
+- **Einzige Ausführung mit 400–409 auf der Kommandozeile:** `analyze --confirm`, um zu prüfen, dass diese Seeds abgewiesen werden; das geschieht vor jedem Laden.
+- **Übrige Rechnungen dieser Sitzung:**
+  - Diagnose, Pilot und Evolution liefen auf Seed 0 und 500–504.
+  - Die Bestätigungen liefen auf 500–504 und 510–514.
+  - Prüf- und Testläufe der Umsetzung und der Reviews mit Mini-Konfiguration nutzten die Seeds 0–8, 900/901 und 910/911.
+- **Nicht prüfbar:** Rechnungen außerhalb dieser Sitzung, etwa auf dem Rechner des Nutzers, in anderen Sitzungen oder in anderen Werkzeugen. Das Review vom 04.10.2026 (`docs/REVIEW-2026-10-04.md`) gibt an, dass dort kein Hauptlauf lief. Ein Nachweis dafür liegt nicht vor.
+
+**Voraussetzungen für das Einfrieren und den Hauptlauf:**
+1. **Hauptlauf** ausschließlich auf den Seeds 400–409, mit der eingefrorenen `pilot_config.json`. Seeds mit gescheiterter Prämisse werden berichtet und nicht ersetzt.
+2. **Beim Einfrieren festhalten:**
+   - die Konfiguration (`frozen_config.json`) und die Code-Prüfsummen (`freeze.sha256`), beides schreibt `freeze write`;
+   - die Umgebung samt Fingerabdruck. Diese Zeile kommt mit Datum in dieses Protokoll:
+     ```bash
+     OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 BLIS_NUM_THREADS=1 python -c "import json; from farbversuch.run import env_block, fingerprint; print(json.dumps({'env': env_block(), 'fingerprint': fingerprint()}, indent=1))"
+     ```
+   - Jede Ergebnisdatei des Hauptlaufs enthält dazu ihren eigenen `env`-Block und `fingerprint`.
+3. **Auswertung unverändert:**
+   - P2 zählt die richtige Zuschreibung; Zusatzöffnungen heben sie nicht auf, sie zählen als Fehlzuschreibungen.
+   - P4 zensiert Nichttreffer am Horizont 300.
+   - P5 vergleicht Trefferquoten.
+4. **Maschine:**
+   - Die Bestätigung 510–514 lief vollständig auf „Intel(R) Xeon(R) Processor @ 2.80GHz“.
+   - Nach den Container-Neustarts meldet der Container am 05.10.2026 „@ 2.10GHz“.
+   - Der Fingerabdruck enthält die CPU. Ein Hauptlauf, der nach einem Neustart auf anderer Hardware weiterläuft, rechnet seine Zwischenstände deshalb neu, statt Ergebnisse zu mischen. Seine Laufzeit kann dadurch deutlich steigen.
+   - Der Hauptlauf muss vollständig auf einer Maschine laufen (Spec v2 §8.5).

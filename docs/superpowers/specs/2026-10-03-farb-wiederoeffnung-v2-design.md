@@ -202,3 +202,40 @@ Grundlage ist eine explorative Diagnose auf Seed 0 (nicht Teil der Vorhersagen) 
 | Bestätigung auf Seeds 500–504 | Die neuen Regeln wurden auf einem einzigen Seed entworfen. |
 | Bestätigung zählt Seeds, in denen alle drei Bedingungen zugleich gelten (Präzisierung von §8, Entscheidung des Nutzers vom 04.10.2026) | Die frühere Formulierung „in mindestens 4 von 5 Seeds jeweils“ ließ auch eine Zählung je Bedingung zu; dann hätte die Methode mit nur 3 vollständig erfolgreichen Seeds als bestätigt gegolten. |
 | Kreuzvalidierung bleibt nach Zeilen | Teilung nach Episoden brachte in der Diagnose mehr Fehlöffnungen (2/5 gegenüber 0/5 bei `global`) und weniger Trennschärfe; δ wird mit derselben Teilung kalibriert. Abhängigkeit wird als Grenze berichtet. |
+
+---
+
+## Anhang B: Review-Nachtrag vom 05.10.2026 (vor dem Einfrieren)
+
+Grundlage ist ein externes Review des Stands `d2134c0`. Die Angaben hier wurden gegen Code und Rohdaten geprüft. Der Nutzer hat am 05.10.2026 entschieden, die bestehende Methode einzufrieren (Entscheidung A).
+
+**Dieser Nachtrag ändert keine Regel.** §4–§8 gelten unverändert: Algorithmen, Hyperparameter, Schwellen, Vorhersagen P1–P5, Abbruchkriterium und Auswertungsdefinitionen. Er präzisiert nur, was die Regeln messen und wo ihre Grenzen liegen.
+
+### B.1 Kalibrierung: was sie abdeckt
+
+- **Bemerken:** Die Schwellen von M3 und CUSUM sind über ganze Null-Ströme kalibriert, also 20 Ströme zu je 400 Episoden, Schwelle = größter Null-Wert. Die ≈ 4,8 % sind die erwartete Fehlalarmrate des Bemerkens pro neuem Strom.
+- **δ:** wird je M3-System aus einem einzigen Endpuffer je Null-Strom bestimmt, den letzten `buffer_size` Schritten. Der Null-Gewinn eines Puffers ist 0, wenn kein Kandidat in allen Teilungen gewinnt. δ = 0 tritt also regelgemäß auf, wenn das auf allen 20 Puffern so ist, und ist für sich kein Implementierungsfehler.
+- **Keine Gesamtrate:** Aus beidem lässt sich keine Gesamtrate falscher Öffnungen über einen Einsatz ableiten. Nach dem Bemerken wird wiederholt erklärt, und Holm gilt je Erklärrunde.
+
+### B.2 Grenzen der Erklärverfahren
+
+- **Zeilenabhängigkeit:** Die Kreuzvalidierung von M3 teilt nach Zeilen, und die Permutationen von S1 vertauschen einzelne Zeilen, obwohl Schritte derselben Episode voneinander abhängen. Die Wahl „Zeilen statt Episoden“ ist **ergebnisgeleitet** (Anhang A): In der Diagnose auf Seed 0 brachte die Teilung nach Episoden mehr Fehlöffnungen.
+- **Adaptive Zusatzöffnungen:** Nach einer Öffnung wechselt das Basismodell. Spätere Tests sind deshalb bedingt auf frühere Entscheidungen, und ihr Fehlerniveau ist nicht gesondert kalibriert.
+- **Fehlöffnung „Farbe 0“ unter `global` (Bestätigungs-Seed 510):** Sie geschah schon beim ersten Erklären, bei Episode 110, mit Gewinn 0,0033 bei δ = 0,0019 > 0. Wiederholtes Testen oder δ = 0 sind dafür keine nachgewiesene Ursache.
+
+### B.3 Aussagegrenzen
+
+- **P1/P1b:** Sie operationalisieren „weitgehend ignoriert“. Ein Nachweis vollständiger Geschlossenheit sind sie nicht.
+  - Der **Restanteil** ist kein Informationsprozentsatz. Er setzt die Probe-Trefferquote aus z, abzüglich Mehrheitsbasis, ins Verhältnis zu der aus der Rohbeobachtung.
+  - Negative Werte heißen: Die Probe aus z ist schlechter als die Vergleichsbasis, die häufigste Farbe der Trainingsteilung.
+- **„Wiederöffnen“:** heißt hier Erweiterung des Erklärmodells um ein Merkmal. Routine und Encoder bleiben unverändert.
+- **Strukturvorgabe von Arm B:** Arm B bekommt mit 6 Merkmalen der Zielzelle eine starke räumliche Vorgabe. Ein Vorteil von B gegenüber A ist zunächst ein Vorteil dieser Vorgabe in dieser Welt.
+- **M3 gegen S1:** M3 berücksichtigt im Modellvergleich die anderen Merkmale: Basisdesign aus z, Aktion und bekannten Merkmalen, Kandidaten residualisiert. S1 testet marginale Unterschiede der Überraschung je Kandidat. Die Übungs-Ontologie entfernt bei S1 nur Kandidaten aus der Testmenge. Der Vergleich isoliert deshalb keine allgemeine Überlegenheit gegenüber klassischer Statistik.
+- **Zusätzliche „Ziel“-Öffnungen unter `red`:** Sie zählen nach §6 als Fehlzuschreibungen. Ein echter Vorhersagegewinn durch ein Ersatzmerkmal ist trotzdem möglich. Diese Erklärung ist ungeprüft.
+
+### B.4 Auswertung im Hauptlauf (unverändert, hier ausdrücklich)
+
+- **Seeds:** Hauptlauf ausschließlich auf den Seeds 400–409. Seeds mit gescheiterter Prämisse werden berichtet und nicht ersetzt (§7).
+- **P2:** zählt die richtige Zuschreibung nach §6. Zusätzliche Öffnungen im selben Strom heben sie nicht auf, sie werden als Fehlzuschreibungen gezählt.
+- **P4:** Die Zuschreibungslatenz ist bei Nichttreffern am Horizont (300 Episoden) zensiert. Fehlzuschreibungen gelten nach §6: außerhalb von `red` nur Farbmerkmale.
+- **P5:** vergleicht Trefferquoten bei `red`, nicht die Präzision aller Öffnungen.

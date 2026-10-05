@@ -1,31 +1,46 @@
-# Handover Farbversuch (Stand 04.10.2026, v2 umgesetzt und nachgebessert, Pilot steht aus)
+# Handover Farbversuch (Stand 05.10.2026: Pilot und Bestätigung erledigt, Einfrieren steht aus)
 
-Für die nächste Claude-Sitzung (Claude Scientific, andere Maschine). Dieses Dokument soll genügen, um ohne weitere Vorgeschichte weiterzuarbeiten. Hintergrund in `docs/PROJEKTBESCHREIBUNG.md`.
+Für die nächste Claude-Sitzung. Dieses Dokument soll genügen, um ohne weitere Vorgeschichte weiterzuarbeiten. Hintergrund in `docs/PROJEKTBESCHREIBUNG.md`, alle Läufe und Änderungen in `farbversuch/PROTOKOLL.md`.
 
 Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf diesem Branch gearbeitet.
 
 ## Kurzfassung
 
-- Der Code für die Version 2 ist fertig und getestet. Es gibt noch **keinen einzigen Lauf** mit der vollen Konfiguration: weder Pilot noch Bestätigung noch Hauptlauf.
-- Nächste Schritte: Pilot Seed 0 → Bestätigung Seeds 500–504 → **Halt, Entscheidung des Nutzers** → Einfrieren → Hauptlauf Seeds 400–409.
-- Die Sitzung, die dieses Dokument liest, macht Pilot und Bestätigung und hält dann an. Seeds 400–409 und `freeze write` nur nach ausdrücklicher Freigabe des Nutzers.
-- Ein fertiger Prompt dafür steht unten im Abschnitt „Prompt für Claude Scientific“.
+- **Code:** v2 ist fertig, geprüft und unverändert seit Merge `b5d573f`.
+- **Pilot und Tuning:** Der Pilot (Seed 0) und die Entwicklung der Trainingsparameter (Seeds 0, 500–504) sind abgeschlossen. Die Konfiguration steht in `farbversuch/pilot_config.json`.
+- **Bestätigung:** Auf den frischen Seeds 510–514 ist die Methode nach der gemeinsamen 4/5-Regel bestätigt. Die Vorhersagen P2–P5 sind damit **nicht** geprüft; das geschieht erst im Hauptlauf.
+- **Entscheidung des Nutzers vom 05.10.2026 (A):** die bestehende Methode einfrieren, ohne weitere Bestätigungsrunde. Algorithmen, Hyperparameter, Schwellen und Vorhersagen bleiben unverändert. Präzisierungen ohne Regeländerung stehen in Spec v2, Anhang B.
+- **Nächste Schritte, je nur auf ausdrückliche Anweisung des Nutzers:**
+  1. Einfrieren (`freeze write`) und die Umgebung festhalten.
+  2. Hauptlauf auf den Seeds 400–409.
+  3. Auswertung und Bericht.
+- **Nicht noch einmal laufen lassen:** Pilot und Bestätigung sind erledigt. Insbesondere `pilot_config.json` **nie** mit `Config().to_json(...)` neu erzeugen. Das würde die abgestimmte Konfiguration mit den Standardwerten überschreiben.
 
 ## Bindende Dokumente
 
-- **Spezifikation v2:** `docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-v2-design.md`. Sie ist eigenständig und bindend. Anhang A nennt die Änderungen gegenüber v1 mit Begründung.
+- **Spezifikation v2:** `docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-v2-design.md`. Sie ist eigenständig und bindend.
+  - Anhang A nennt die Änderungen gegenüber v1 mit Begründung.
+  - Anhang B ist der Review-Nachtrag vom 05.10.2026: Kalibrierung, Grenzen, Aussagegrenzen und Auswertungsregeln, ohne Regeländerung.
 - **Plan v2:** `docs/superpowers/plans/2026-10-03-farb-wiederoeffnung-v2.md`, dort die „Festlegungen“ 1–10 (RNG-Schlüssel, Residualisieren, Öffnungsregel, δ-Gewinn, P1b-Messung, Bestätigung, `total_sec`, Ergebnis-JSON). Der v1-Plan gilt mit seinen Festlegungen weiter, soweit der v2-Plan nichts anderes sagt.
+- **Protokoll:** `farbversuch/PROTOKOLL.md`. Es enthält alle Pilot-Änderungen, Raster und Evolution, beide Bestätigungen, die Entwicklungsgeschichte, die Prüfung der bisherigen Nutzung der Seeds 400–409 und die Voraussetzungen fürs Einfrieren.
 - **v1 ist Geschichte:** `docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-design.md` und `docs/superpowers/plans/2026-10-03-farb-wiederoeffnung.md`. Wo sie von v2 abweichen, gilt v2.
 - Bei Widerspruch zwischen Doku und Code: nicht raten, den Nutzer fragen.
 
 ## Stand
 
-- **Code:** Die Aufgaben 1–8 des Plans v2 sind umgesetzt (Commits `998f4aa` bis `8f4633e` auf dem Branch), jede einzeln geprüft. Aufgabe 9 ist diese Dokumentation. Danach folgte eine Fix-Welle nach der Abschlussprüfung (Commits ab `2f835b1`, 04.10.2026) mit zwei Entscheidungen des Nutzers (D1, D2) und weiteren Korrekturen. Parallel dazu hat der Nutzer ein eigenes Review mit vier Korrekturen eingebracht (Commit `436c621`, `docs/REVIEW-2026-10-04.md`); beides ist zusammengeführt (Merge `b5d573f`). Siehe „Abweichungen und Festlegungen“.
-- **Tests** (gemessen auf der Maschine der Umsetzung: 4 Kerne, Python 3.11.15, numpy 2.4.6):
-  - Alle: `python -m pytest -q` gibt **362 passed** in 179 s (2:58), ohne Warnungen (auch mit `-W error`).
-  - Ohne die langsamen: `python -m pytest -q -m "not slow"` gibt **333 passed, 29 deselected** in 8,7 s.
-- **Offen:** Pilot, Bestätigung, Entscheidung des Nutzers, Einfrieren, Hauptlauf, Bericht (feste Gliederung nach Spec v2 §11, noch nicht geschrieben).
-- Nicht vorhanden und noch nicht erzeugt: `farbversuch/pilot_config.json`, `farbversuch/PROTOKOLL.md`, `farbversuch/frozen_config.json`, `farbversuch/freeze.sha256`, `farbversuch/results/`.
+- **Code:**
+  - Die Aufgaben 1–9 des Plans v2 sind umgesetzt, dazu die Fix-Welle nach der Abschlussprüfung (Entscheidungen D1, D2 und weitere Korrekturen).
+  - Das Review des Nutzers (Commit `436c621`, `docs/REVIEW-2026-10-04.md`) ist mit Merge `b5d573f` eingeflossen.
+  - Seitdem hat sich keine `*.py`-Datei mehr geändert. Siehe „Abweichungen und Festlegungen“.
+- **Tests** (4 Kerne, Python 3.11.15, numpy 2.4.6):
+  - `python -m pytest -q` gibt **362 passed**, ohne Warnungen.
+  - `python -m pytest -q -m "not slow"` gibt **333 passed, 29 deselected**.
+- **Läufe** (Einzelheiten im Protokoll):
+  - `results/pilot`: Seed 0 mit wd 0,01.
+  - `results/confirm`: 500–504, nicht bestätigt.
+  - `results/evo`: Raster und Evolution.
+  - `results/confirm_510`: 510–514, bestätigt.
+- **Offen:** Einfrieren, Hauptlauf, Bericht (feste Gliederung nach Spec v2 §11). `farbversuch/frozen_config.json`, `farbversuch/freeze.sha256` und `farbversuch/results/main/` gibt es noch nicht.
 
 ### Was v2 gegenüber v1 ändert (Kurzfassung der Spec)
 
@@ -36,7 +51,7 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf d
 - **P1b „weitgehend geschlossen“:** Restanteil ≤ 0,15 und Verschiebung von z ≤ 0,25 (500 Positionen). Scheitert P1 oder P1b, entfällt der Seed („Prämisse nicht erfüllt“). Die Prämisse wird direkt nach Routine und Vorwärtsmodell geprüft; scheitert sie, laufen weder Übungs-Ontologie, Null-Ströme und δ noch `p_global` und die Bedingungen (Entscheidung D2).
 - **S1:** Permutationen Arm B 1000, Arm A 25.000 (blockweise zu 1000), damit S1-A bei 1192 Kandidaten überhaupt ablehnen kann.
 - **Zuschreibung bei `red`** zählt nur nach dem Wechsel.
-- **Bestätigung auf Seeds 500–504** vor dem Einfrieren, Auswertung mit `analyze --confirm`. Bestätigt ist die Methode, wenn in mindestens 4 von 5 Seeds alle drei Kriterien gleichzeitig gelten (Entscheidung D1).
+- **Bestätigung** vor dem Einfrieren, Auswertung mit `analyze --confirm`. Bestätigt ist die Methode, wenn in mindestens 4 von 5 Seeds alle drei Kriterien gleichzeitig gelten (Entscheidung D1). 500–504: nicht bestätigt; 510–514 (nach Entwicklung auf 0 und 500–504): bestätigt.
 - **Paralleler Treiber** über Seeds und Bedingungen mit Fortsetzen nach Abbruch.
 
 ### Code-Überblick
@@ -72,87 +87,69 @@ Was `--jobs` bewirkt: Der Treiber hat drei Stufen, jede mit eigenem Prozess-Pool
 
 Die BLAS-Threads setzt der Code selbst auf 1. Mehr Jobs als physische Kerne bringen nichts. Der Arbeitsspeicher je Prozess ist nicht gemessen.
 
-### 1. Pilot auf Seed 0
+### 1. Erledigt: Pilot, Entwicklung, Bestätigungen
 
-`farbversuch/pilot_config.json` gibt es noch nicht. Sie wird aus den Standardwerten erzeugt:
+Nicht wiederholen. Ergebnisse und Begründungen stehen in `farbversuch/PROTOKOLL.md`, die Berichte in `farbversuch/results/pilot_report.md`, `confirm_report.md` und `confirm_510_report.md`.
 
-```bash
-mkdir -p farbversuch/results
-python -c "from farbversuch.config import Config; Config().to_json('farbversuch/pilot_config.json')"
-python -m farbversuch.run --config farbversuch/pilot_config.json --seeds 0 --jobs 4 --out farbversuch/results/pilot 2> farbversuch/results/pilot.log
-python -m farbversuch.analyze --results farbversuch/results/pilot --seeds 0 > farbversuch/results/pilot_report.md
-```
+**Verbrauchte Seeds:** 0, 500–504 und 510–514. Sie werden für keine Bestätigung und keinen Hauptlauf wiederverwendet.
 
-- Fortschrittszeilen mit Zeitstempel gehen auf stderr (hier in die Logdatei). Lange Läufe im Hintergrund und in einer eigenen Prozessgruppe starten, z. B. `setsid nohup python -m farbversuch.run … < /dev/null > farbversuch/results/pilot.stdout 2> farbversuch/results/pilot.log &` (`pilot.stdout` enthält nur die Zeilen `seed N fertig` und wird nicht committet), und das Log lesen. Mit `setsid` ist die Prozessgruppe gleich der PID des Hauptprozesses; so lässt sich der Lauf samt Arbeitsprozessen beenden (siehe „Unterbrechen und Fortsetzen“).
-- `analyze` ohne `--confirm` ist für Seed 0 eine **explorative Auswertung**: Die Urteile zu P2–P5 und zum Abbruchkriterium stehen dort als „–“. Das ist gewollt.
-- Werte ansehen: Tabelle „Werte je Seed“ im Bericht (Farbinvarianz, Restanteil, Verschiebung, Übungs-Ontologien, δ und Nutzbarkeit je M3-System). Das Vorwärtsmodell-Kriterium von P1 (`fwd_surprise` gegen `freq_surprise`), die Schwellen und `p_global` stehen nur in der JSON-Datei:
+**Bestätigung 510–514, berichtigte Zahlen:**
+- **M3-B unter `red`:** öffnet „Farbe 0“ bei Episode 130, 140, 140, 130 und 130, also 30–40 Episoden nach dem Wechsel, im Mittel 34.
+- **M3-A unter `red`:** 3/5 Treffer, je bei Latenz 40. Der Mittelwert 144 zählt 2 Nichttreffer mit 300.
+- **Fehlzuschreibungen insgesamt:** M3-B 5, M3-A 2.
+- **S1-B unter `red`:** ebenfalls 5/5 Treffer.
 
-```bash
-python -c "import json; r=json.load(open('farbversuch/results/pilot/seed_0.json')); print(json.dumps({k: r[k] for k in ('premise','calibration','practice','delta','p_global','phase1_sec','total_sec')}, indent=1, ensure_ascii=False))"
-```
+### 2. Einfrieren (nur auf ausdrückliche Anweisung des Nutzers)
 
-- `premise.ok` ist wahr, wenn Farbinvarianz ≥ 0,95, `fwd_surprise` < `freq_surprise`, Restanteil ≤ 0,15 und Verschiebung ≤ 0,25 gelten. `restanteil` oder `shift` gleich `null` heißt: nicht endlich, also nicht erfüllt. Bei `ok = false` sind `conditions`, `calibration`, `practice`, `delta` und `p_global` `null`: Sie werden dann gar nicht berechnet (Entscheidung D2), im Bericht steht „–“.
-- `p_global` hat die Kennzeichen `hit` (Toleranz getroffen) und `bracketed` (Zielwert einschließbar). Auffällig ist `bracketed = false`.
+Voraussetzungen und Ablauf, siehe auch PROTOKOLL, „Review-Nachtrag 05.10.2026“:
 
-**Erwartung (Annahme, nicht gemessen):** Die Routine und ihr Training sind seit der v1-Diagnose unverändert (`routine.py`, `world.py`, `forward.py` sind es seit dem v1-Stand). Dort lag die Farbinvarianz auf Seed 0 bei 0,926 (Schwelle 0,95, 1 BLAS-Thread). Mit den Standardwerten scheitert P1 im Pilot deshalb wahrscheinlich. Die damaligen Werte für Schwellen und `p_global` sind veraltet, weil Kalibrierung und Null-Ströme sich geändert haben. Die explorative Diagnose in Spec v2 Anhang A nennt für Seed 0 Restanteil ≈ 7 % und Verschiebung ≈ 15 % (explorative Diagnose, kein Ergebnis dieses Piloten).
+1. **Arbeitsstand prüfen:** `git status` muss sauber sein, und `python -m pytest -q -m "not slow"` muss grün sein. Keine Quelldatei ändern.
+2. **Einfrieren:** Das schreibt `frozen_config.json` (gleich `pilot_config.json`) und SHA-256 aller `*.py` (auch Tests), `requirements.txt`, `pytest.ini` und `frozen_config.json` in `freeze.sha256`. Danach darf sich keine Quelldatei mehr ändern.
+   ```bash
+   python -m farbversuch.freeze write --config farbversuch/pilot_config.json
+   python -m farbversuch.freeze verify          # muss OK ausgeben
+   ```
+3. **Umgebung und Fingerabdruck** auf der Maschine des Hauptlaufs festhalten und mit Datum ins Protokoll eintragen:
+   ```bash
+   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 BLIS_NUM_THREADS=1 python -c "import json; from farbversuch.run import env_block, fingerprint; print(json.dumps({'env': env_block(), 'fingerprint': fingerprint()}, indent=1))"
+   ```
+4. **Abschluss:** `frozen_config.json`, `freeze.sha256` und `PROTOKOLL.md` committen und auf den Branch pushen.
 
-**Scheitert P1 oder P1b:**
-1. Anhalten und dem Nutzer die Werte zeigen: Farbinvarianz, `fwd_surprise` gegen `freq_surprise`, Restanteil, Verschiebung. Übungs-Ontologien, δ, Schwellen und `p_global` gibt es dann nicht: Sie werden bei gescheiterter Prämisse nicht berechnet (Entscheidung D2).
-2. Einen Vorschlag machen, aber nichts ändern, bevor der Nutzer zustimmt.
-3. Erlaubte Änderungen nach Spec v2 §8: nur Trainings-Hyperparameter der Routine und des Vorwärtsmodells, Puffergröße, Prüfintervall. In der Konfiguration sind das: `lr`, `epochs`, `wd`, `init_std` (Routine), `fwd_l2`, `logreg_tol`, `logreg_max_iter` (Vorwärtsmodell), `buffer_size`, `check_interval`. Grenzfälle, die nicht ausdrücklich genannt sind (`k`, `n_teacher_episodes`, `n_forward_episodes`): nur mit Rückfrage. Alles andere (Welt, Schwellenlogik, `pre_open_delta`, `max_restanteil`, `max_shift`, `min_invariance`, `max_open`, `alpha`, Permutationszahlen, Seeds) ist tabu.
-   Jeder Vorschlag nennt die Kopplungen (geprüft gegen `run.py`, `monitor.py`, `closure.py`):
-   - `fwd_l2`, `logreg_tol` und `logreg_max_iter` steuern nicht nur das Vorwärtsmodell. Über `_fit_kw` in `run.py` wirken sie auch auf das Vor-Öffnen der M3-Systeme und auf die δ-Kalibrierung; im Einsatz übergibt `deploy()` sie direkt an den Monitor (M3-Anpassungen). Das Vorwärtsmodell selbst bestimmt die Überraschung und damit Schwellen, `p_global` und die S1-Tests. `fwd_l2` ist außerdem das L2 der P1b-Probe, also des Restanteils (`logreg_tol` und `logreg_max_iter` wirken dort nicht).
-   - `buffer_size` bestimmt die Länge des Übungspuffers, der δ-Puffer und des Ringpuffers im Einsatz.
-4. Naheliegend wäre ein stärkerer Weight Decay oder mehr Epochen für die Farbinvarianz (Annahme, nicht geprüft).
-5. Jede Änderung mit Grund in `farbversuch/PROTOKOLL.md` festhalten, **bevor** das alte Ergebnis gelöscht wird (die alten Messwerte dort mit eintragen). Ein Eintrag: Datum, Parameter alt → neu, Grund (Messwert), Ergebnis des nächsten Pilots. Ändert sich `fwd_l2`, enthält der Eintrag immer den Restanteil vorher und nachher, denn `fwd_l2` ist auch das L2 der P1b-Probe.
-6. Altes Pilotergebnis löschen, sonst bricht die CLI ab (sie überschreibt keine Ergebnisse einer anderen Konfiguration): `rm -rf farbversuch/results/pilot farbversuch/results/pilot.log farbversuch/results/pilot_report.md`. Dann Pilot neu starten.
+### 3. Hauptlauf 400–409 (nur nach dem Einfrieren und auf Anweisung des Nutzers)
 
-Sind P1 und P1b erfüllt, braucht es keine Rückfrage. Die Pilot-Konfiguration ist dann fertig, und es geht mit der Bestätigung weiter. Die Pilotergebnisse und `pilot_config.json` committen.
-
-### 2. Bestätigung auf Seeds 500–504
-
-Mit **derselben** `pilot_config.json`:
-
-```bash
-python -m farbversuch.run --config farbversuch/pilot_config.json --seeds 500-504 --jobs $JOBS --out farbversuch/results/confirm 2> farbversuch/results/confirm.log
-python -m farbversuch.analyze --results farbversuch/results/confirm --seeds 500-504 --confirm > farbversuch/results/confirm_report.md
-```
-
-- Die Methode gilt als bestätigt, wenn es mindestens 4 von 5 Seeds gibt, in denen **alle drei** Kriterien **gleichzeitig** gelten: (1) P1 und P1b erfüllt, (2) M3-B öffnet bei `none` und `global` nichts über die Übungs-Ontologie hinaus, (3) M3-B öffnet bei `red` „Farbe 0“ nach dem Wechsel. Ein Seed mit gescheiterter Prämisse zählt bei (2) und (3) als nicht erfüllt. Entscheidend ist im Bericht die Zeile „Alle drei Kriterien gleichzeitig“; die Zählungen je Kriterium stehen dort nur zur Information (Präzisierung der Spec v2 §8, Entscheidung des Nutzers vom 04.10.2026).
-- `analyze --confirm` weist Seeds aus 400–409, Seeds unter 500 (auch Seed 0), doppelte Seeds und weniger als 5 Seeds ab. Das ist Absicht: Hauptlauf-Seeds und der Pilot dürfen nicht zur Bestätigung dienen.
-- Pilot und Bestätigung laufen jeweils komplett auf derselben Maschine. `analyze` verlangt über alle Seeds gleiche Konfiguration, gleiche Umgebung und gleichen Fingerabdruck von Code und Umgebung und bricht sonst ab.
-- Ist die Bestätigung gestartet, bleibt `pilot_config.json` unverändert, und die Seeds 500–504 laufen nicht mit einer anderen Konfiguration neu: Mit dem Start sind sie verbraucht.
-- Danach **anhalten** und dem Nutzer berichten (Tabelle „Bestätigung“, Werte je Seed, Laufzeiten).
-
-### 3. Entscheidung des Nutzers, Einfrieren, Hauptlauf (nur nach ausdrücklicher Freigabe)
-
-Das gehört nicht zum Auftrag der Sitzung, die Pilot und Bestätigung macht. Der Ablauf nach Spec v2 §8:
-
-- **Nicht bestätigt:** Ergebnis zurück an den Nutzer. Eine weitere Runde läuft nur auf neuen Seeds (510–514 usw.). Seeds, die eine Bestätigungsrunde oder den Hauptlauf bestritten haben (500–504, 400–409, …), werden nie wiederverwendet. Seed 0 darf im Pilot nach erlaubten Änderungen erneut laufen.
-- **Bestätigt:** Der Nutzer entscheidet, ob zusätzlich Seeds 505–509 laufen (gleicher Befehl mit `--seeds 505-509 --out farbversuch/results/confirm2`).
-- **Einfrieren** (erst nach Freigabe): schreibt `frozen_config.json` und SHA-256 aller `*.py` (auch Tests), `requirements.txt` und `pytest.ini` in `freeze.sha256`. Danach darf sich keine Quelldatei mehr ändern.
+- **Seeds:** ausschließlich 400–409, mit der eingefrorenen Konfiguration. Seeds mit gescheiterter Prämisse werden berichtet und **nicht ersetzt** (Spec v2 §7). Kein weiterer Seed, keine Wiederholung mit anderer Konfiguration.
+- **Maschine:** Der ganze Lauf auf einer Maschine (Spec v2 §8.5).
+  - Der Fingerabdruck enthält CPU und Umgebung.
+  - Wechselt die Hardware nach einem Container-Neustart, wird neu gerechnet statt gemischt. Am 05.10.2026 meldete der Container nach Neustarts eine andere CPU (2,10 statt 2,80 GHz).
+- **Jobs:** Stufe 1 nutzt höchstens 10, Stufe 2 höchstens 40 Jobs. `<N>` = Zahl der physischen Kerne, höchstens 40; die Zahl direkt eintragen.
   ```bash
-  python -m farbversuch.freeze write --config farbversuch/pilot_config.json
-  python -m farbversuch.freeze verify          # muss OK ausgeben
-  ```
-  Dann committen und pushen.
-- **Hauptlauf** (erst nach Freigabe und nach dem Einfrieren), Seeds 400–409, mit der eingefrorenen Konfiguration. Stufe 1 nutzt höchstens 10, Stufe 2 höchstens 40 Jobs. `<N>` = Zahl der physischen Kerne, höchstens 40; die Zahl direkt eintragen (die Variable `JOBS` aus Abschnitt 0 ist auf 20 begrenzt und gilt nicht über Sitzungen hinweg):
-  ```bash
-  python -m farbversuch.run --config farbversuch/frozen_config.json --seeds 400-409 --jobs <N> --out farbversuch/results/main 2> farbversuch/results/main.log
+  setsid nohup python -m farbversuch.run --config farbversuch/frozen_config.json --seeds 400-409 --jobs <N> --out farbversuch/results/main < /dev/null > farbversuch/results/main.stdout 2> farbversuch/results/main.log &
+  # nach dem Ende:
   python -m farbversuch.freeze verify
-  python -m farbversuch.analyze --results farbversuch/results/main --seeds 400-409
+  python -m farbversuch.analyze --results farbversuch/results/main --seeds 400-409 > farbversuch/results/main_report.md
   ```
-  Nur diese Auswertung gibt die vorregistrierten Urteile zu P2–P5 und zum Abbruchkriterium aus. Dabei prüft `analyze` das Einfrieren: `freeze verify` ohne Befund und `frozen_config.json` gleich der Konfiguration der Ergebnisse. Fehlt etwas, steht oben im Bericht und auf stderr eine **WARNUNG**; die Urteile sind dann nicht durch das Einfrieren gedeckt, und der Nutzer muss das wissen. Alles, was nach dem Hauptlauf geändert oder ergänzt wird, ist „nachträgliche Erkundung“ und steht im Bericht getrennt.
+- **Auswertung:** Nur diese Auswertung gibt die vorregistrierten Urteile zu P2–P5 und zum Abbruchkriterium aus.
+  - `analyze` prüft dabei das Einfrieren. Fehlt etwas, steht oben im Bericht und auf stderr eine **WARNUNG**.
+  - Die Auswertungsregeln sind unverändert (Spec v2 §6/§7, Anhang B.4): Zusatzöffnungen heben P2 nicht auf, P4 zensiert am Horizont 300, und P5 vergleicht Trefferquoten.
+- **Danach:** Alles, was nach dem Hauptlauf geändert oder ergänzt wird, ist „nachträgliche Erkundung“ und steht im Bericht getrennt.
 
 ### Laufzeit
 
-Für v2 mit der vollen Konfiguration gibt es **keine gemessene Laufzeit**. Eine Hochrechnung wäre geraten. Der Pilot liefert die ersten Zahlen. Wo sie stehen:
+Gemessen auf 4 Kernen (Intel Xeon, `--jobs 4`) mit der Pilot-Konfiguration, Bestätigung 510–514:
+- **Phase 1 je Seed** (Training, Prämisse, Vor-Öffnen, 20 Null-Ströme, δ): 1764–1813 s. Den Großteil davon braucht die δ-Kalibrierung von M3-A, etwa 22 Minuten.
+- **Bedingungen je Seed:** `none` und `walls` meist wenige Sekunden. Bemerkt dort ein System etwas, sind es bis etwa 23 Minuten. `red` 3,5–40 Minuten, `global` 33–44 Minuten. M3-A dominiert.
+- **Rechenzeit gesamt je Seed** (`total_sec`): 4035–6735 s.
+- **Wandzeit für 5 Seeds auf 4 Kernen:** 3 h 27 min, einschließlich zweier Container-Neustarts mit verlorener Arbeit.
+- **Schätzung Hauptlauf (10 Seeds, 4 Kerne):** etwa 5–6 Stunden ohne Neustarts.
+  - Stufe 1: 3 Runden zu je ~30 min.
+  - Stufe 2: ~10,5 Rechenstunden, verteilt auf 4 Kerne.
+  - Jeder Container-Neustart kostet die gerade laufenden Aufgaben, bis zu ~45 min.
 
-- Je Seed in der JSON-Datei: `phase1_sec` (Phase 1 mit Vor-Öffnen und Kalibrierung; bei gescheiterter Prämisse nur Routine und Vorwärtsmodell) und `total_sec` (Vorbereitungszeit plus **Summe** der vier Bedingungszeiten). `total_sec` ist also Rechenzeit über alle Prozesse, nicht die Wandzeit des Laufs.
-- Wandzeit: Das Log (stderr) hat je Zeile `HH:MM:SS` ohne Datum. Je Seed kommen nacheinander `seed N gestartet`, `Routine trainiert (X s)`, `Vorwärtsmodell fertig (X s)` und `Prämisse ok` bzw. `Prämisse nicht erfüllt` mit Invarianz, Restanteil und Verschiebung. Nur bei erfüllter Prämisse folgen `Vor-Öffnen <System>: <Merkmale>` je System, `Null-Ströme und Schwellen fertig (X s)`, `δ <M3-System> = …` je M3-System und `Phase 1 fertig (X s)`; X ist dort die Rechenzeit von Phase 1 ohne Prämissenprüfung. Danach rechnet `p_global` ohne eigene Zeile. Je Bedingung gibt es `seed N Bedingung C gestartet` und `… fertig (X s)`. Dazu kommen `… übernommen` für wiederverwendete Zwischenstände, `… unlesbar …, wird neu berechnet` und `verwaiste Sperre … übernommen`. Stufenmarken gibt es nicht. `seed N fertig` (Stufe 3) geht auf stdout, ohne Zeitstempel, und steht nicht im Log. Die gesamte Wandzeit deshalb mit `date` vor dem Start und nach dem Ende jedes Laufs notieren.
-- Im Bericht: Abschnitt „Kosten“ (Zeit je Prüfung, Gesamtzeit je System und Bedingung).
-- Zum Vergleich nur ein v1-Wert, der für v2 nicht gilt: M3-A brauchte in v1 etwa 75–90 s pro Prüfung. In v2 kommen Vor-Öffnen mit 1192 Kandidaten und die δ-Kalibrierung auf 20 Puffern hinzu; M3-A und S1-A (25.000 Permutationen) sind vermutlich die teuersten Teile (Annahme).
-- Beim Bericht an den Nutzer immer Kernzahl, `--jobs` und die Zeiten angeben, damit Bestätigung und Hauptlauf eingeschätzt werden können.
+Wo die Zahlen stehen:
+- Je Seed in der JSON-Datei: `phase1_sec` und `total_sec`. `total_sec` ist die Summe über die Prozesse, nicht die Wandzeit.
+- Wandzeit: aus den Zeitstempeln im Log (`HH:MM:SS`, ohne Datum) und mit `date` vor dem Start und nach dem Ende notieren.
+- Im Bericht: Abschnitt „Kosten“.
+
 
 ### Unterbrechen und Fortsetzen
 
@@ -169,81 +166,28 @@ Ein unterbrochener Lauf lässt sich mit **demselben Befehl** neu starten, aber m
 
 ### Ergebnisse committen
 
-Die Ordner `farbversuch/results/<name>/.work`, `*.tmp` (beide stehen in `.gitignore`) und `.lock` nicht committen. Gezielt hinzufügen:
+Die Ordner `farbversuch/results/<name>/.work`, `*.tmp` (beide stehen in `.gitignore`), `.lock` und `*.stdout` nicht committen. Für den Hauptlauf gezielt hinzufügen:
 
 ```bash
-git add farbversuch/pilot_config.json farbversuch/results/pilot/seed_*.json farbversuch/results/pilot.log farbversuch/results/pilot_report.md
-git add farbversuch/PROTOKOLL.md                  # nur wenn vorhanden
-git add farbversuch/results/confirm/seed_*.json farbversuch/results/confirm.log farbversuch/results/confirm_report.md
+git add farbversuch/frozen_config.json farbversuch/freeze.sha256 farbversuch/PROTOKOLL.md
+git add farbversuch/results/main/seed_*.json farbversuch/results/main.log farbversuch/results/main_report.md
 ```
 
 Die Commit-Nachricht endet mit den Attributionszeilen der jeweiligen Sitzung. Gepusht wird nur auf `claude/dreamy-wozniak-7xt321`.
 
-## Prompt für Claude Scientific
+## Früherer Prompt für Claude Scientific (erledigt, nicht mehr verwenden)
 
-Zum Einfügen als erste Nachricht der neuen Sitzung:
+Der Prompt für Pilot und Bestätigung 500–504 stand bis Commit `d2134c0` in diesem Dokument. Er ist erledigt und wurde entfernt. Er würde `pilot_config.json` mit Standardwerten neu erzeugen und verbrauchte Seeds wiederverwenden. Für Einfrieren und Hauptlauf gelten die Abschnitte 2 und 3 oben.
 
-````text
-Du setzt das Projekt „Farbversuch“ fort (Repo aporia-evo/tths, Branch claude/dreamy-wozniak-7xt321, Python mit numpy). Antworte auf Deutsch, knapp und sachlich. Schreibe „bestätigt“ oder „bewiesen“ nur bei erfüllter Vorhersage.
-
-Lies zuerst vollständig: docs/HANDOVER.md, docs/PROJEKTBESCHREIBUNG.md, docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-v2-design.md und docs/REVIEW-2026-10-04.md (Review des Nutzers; Punkt 1 ist durch die Entscheidung D1 erledigt). Bindend sind diese Spezifikation v2 und der Plan docs/superpowers/plans/2026-10-03-farb-wiederoeffnung-v2.md.
-
-Auftrag: Pilot auf Seed 0, danach Bestätigung auf den Seeds 500-504, Ergebnisse committen und pushen, Bericht an mich. Danach anhalten.
-
-Harte Grenzen:
-- Arbeite nur auf dem Branch claude/dreamy-wozniak-7xt321 und pushe nur dorthin. Kein Pull Request.
-- Ändere keinen Code und keine Doku. Schreiben darfst du nur farbversuch/pilot_config.json, farbversuch/PROTOKOLL.md und Dateien unter farbversuch/results/. Findest du einen Fehler im Code, behebe ihn nicht: anhalten und mit Fehlertext melden.
-- Lass die Seeds 400-409 NICHT laufen.
-- Führe `python -m farbversuch.freeze write` NICHT aus.
-- Starte keine weiteren Seeds (505-509, 510-514 usw.) ohne meine ausdrückliche Anweisung.
-- Sobald die Bestätigung (Schritt 4) gestartet ist, ändere farbversuch/pilot_config.json nicht mehr und lass die Seeds 500-504 nicht mit einer anderen Konfiguration neu laufen.
-- Pilot und Bestätigung laufen auf derselben Maschine. Ändere während eines Laufs keine *.py-Datei (Schreiben nach farbversuch/results/, in farbversuch/pilot_config.json und farbversuch/PROTOKOLL.md ist erlaubt).
-
-Schritt 1: Einrichten und Tests
-```bash
-git fetch origin && git checkout claude/dreamy-wozniak-7xt321 && git pull
-python -m pip install -r requirements.txt
-python -m pytest -q -m "not slow"
-```
-Erwartet: 333 passed, 29 deselected. Schlägt das fehl, halte an und melde es.
-Bestimme die Zahl der physischen Kerne (`lscpu -p=CORE,SOCKET | grep -v '^#' | sort -u | wc -l`, sonst `nproc`) und nenne sie als JOBS, höchstens 20.
-
-Schritt 2: Pilot auf Seed 0
-```bash
-mkdir -p farbversuch/results
-python -c "from farbversuch.config import Config; Config().to_json('farbversuch/pilot_config.json')"
-python -m farbversuch.run --config farbversuch/pilot_config.json --seeds 0 --jobs 4 --out farbversuch/results/pilot 2> farbversuch/results/pilot.log
-python -m farbversuch.analyze --results farbversuch/results/pilot --seeds 0 > farbversuch/results/pilot_report.md
-```
-Starte lange Läufe im Hintergrund in eigener Prozessgruppe (`setsid nohup <Befehl> < /dev/null > <name>.stdout 2> <name>.log &`, siehe HANDOVER) und lies das Log. Notiere `date` vor dem Start und nach dem Ende. Der Lauf lässt sich nach einer Unterbrechung mit demselben Befehl fortsetzen, aber mit `2>>` statt `2>`, damit das Log erhalten bleibt.
-Berichte mir die Werte: P1 (Farbinvarianz, Vorwärtsmodell gegen Häufigkeitsmodell), P1b (Restanteil, Verschiebung), die Übungs-Ontologie je System, δ je M3-System, die Schwellen und p_global (mit hit und bracketed); die vier letzten gibt es nur bei erfüllter Prämisse. Sie stehen im Bericht und in farbversuch/results/pilot/seed_0.json (siehe HANDOVER, Abschnitt „1. Pilot auf Seed 0“).
-
-Schritt 3: Entscheidung nach dem Pilot
-- Sind P1 und P1b erfüllt (premise.ok ist wahr): ohne Rückfrage weiter mit Schritt 4. Committe farbversuch/pilot_config.json und die Pilotergebnisse (siehe HANDOVER, „Ergebnisse committen“) und pushe.
-- Scheitert P1 oder P1b: HALT. Zeige mir die Werte (Übungs-Ontologien, δ, Schwellen und p_global werden dann nicht berechnet) und schlage Änderungen vor. Ändere nichts, bevor ich zustimme. Erlaubt nur lr, epochs, wd, init_std, fwd_l2, logreg_tol, logreg_max_iter, buffer_size, check_interval. k, n_teacher_episodes, n_forward_episodes nur nach Rückfrage. Alles andere ist tabu (Welt, Schwellenlogik, pre_open_delta, max_restanteil, max_shift, min_invariance, max_open, alpha, Permutationszahlen, Seeds). Nenne bei jedem Vorschlag die Kopplungen: fwd_l2, logreg_tol und logreg_max_iter wirken auch auf das Vor-Öffnen der M3-Systeme, die δ-Kalibrierung und die M3-Anpassungen im Einsatz, fwd_l2 zusätzlich auf die P1b-Probe; buffer_size bestimmt Übungspuffer, δ-Puffer und Ringpuffer. Jede Änderung mit Grund und den alten Messwerten in farbversuch/PROTOKOLL.md eintragen (bei einer Änderung von fwd_l2 immer den Restanteil vorher und nachher), dann das alte Pilotergebnis löschen (rm -rf farbversuch/results/pilot farbversuch/results/pilot.log farbversuch/results/pilot_report.md), sonst bricht die CLI ab, und den Pilot neu laufen lassen.
-- Bei technischen Fehlern (Absturz, rote Tests): nichts umgehen, mit Fehlertext melden.
-
-Schritt 4: Bestätigung auf den Seeds 500-504 mit derselben pilot_config.json
-```bash
-python -m farbversuch.run --config farbversuch/pilot_config.json --seeds 500-504 --jobs JOBS --out farbversuch/results/confirm 2> farbversuch/results/confirm.log
-python -m farbversuch.analyze --results farbversuch/results/confirm --seeds 500-504 --confirm > farbversuch/results/confirm_report.md
-```
-(JOBS durch die Zahl aus Schritt 1 ersetzen. Auch hier `date` vor und nach dem Lauf notieren; beim Neustart `2>>` statt `2>`.)
-
-Schritt 5: Committen und pushen
-Füge gezielt hinzu: farbversuch/pilot_config.json, farbversuch/PROTOKOLL.md (falls vorhanden), farbversuch/results/pilot/seed_*.json, farbversuch/results/confirm/seed_*.json, die .log- und _report.md-Dateien. Nicht committen: .work-Ordner und *.tmp. Commit-Nachricht auf Deutsch, am Ende die Attributionszeilen deiner Sitzung. `git push origin claude/dreamy-wozniak-7xt321`.
-
-Schritt 6: Bericht an mich
-- Pilot: Werte wie in Schritt 2, Änderungen an der Konfiguration (mit Verweis auf PROTOKOLL.md).
-- Bestätigung: die Tabelle „Bestätigung“ aus confirm_report.md (entscheidend ist die Zeile „Alle drei Kriterien gleichzeitig“, die drei Kriterien stehen zur Information darunter), die Kriterien je Seed, P1/P1b-Werte, Übungs-Ontologien und δ je Seed, bei `red` die Nutzbarkeit.
-- Laufzeiten: Kernzahl, --jobs, Gesamtwandzeit (aus `date`), aus dem Log die Zeitstempel je Seed für „gestartet“, „Prämisse …“, „Phase 1 fertig“ und „Bedingung … fertig“, dazu phase1_sec und total_sec je Seed.
-- Getrennt: Beobachtet (Zahlen) und Deutung (ausdrücklich als Annahme).
-- Auffälligkeiten: Warnungen, Abbrüche, p_global mit bracketed = false, Seeds mit gescheiterter Prämisse.
-
-Danach STOPP. Starte nicht die Seeds 400-409 und führe nicht `freeze write` aus. Ob zusätzlich 505-509 laufen, ob eingefroren wird und wann der Hauptlauf startet, entscheide ich.
-````
 
 ## Abweichungen und Festlegungen während der Umsetzung (v2)
+
+Review-Nachtrag vom 05.10.2026, vor dem Einfrieren (Entscheidung A des Nutzers):
+
+- **Keine Änderung** an Code, Algorithmen, Hyperparametern, Schwellen oder Vorhersagen.
+- **Berichtigt:** die Zahlen der Bestätigung 510–514 (siehe Abschnitt 1 oben und PROTOKOLL).
+- **Begriff:** „Trefferquote auf den Lehrerdaten“ heißt jetzt „Trainingsgenauigkeit“.
+- **Neu dokumentiert:** die Entwicklungsgeschichte, einschließlich der ergebnisgeleiteten Wahl der Kreuzvalidierung nach Zeilen. Ebenso die Kalibrierungsgrenzen, die Aussagegrenzen und die Voraussetzungen fürs Einfrieren (Spec v2, Anhang B; PROTOKOLL).
 
 Review des Nutzers vom 04.10.2026 (Commit `436c621`, Begründung und Reproduktionen in `docs/REVIEW-2026-10-04.md`), zusammengeführt mit der Fix-Welle:
 
@@ -293,7 +237,11 @@ Bei der Prüfung der Aufgaben bewusst offen gelassen. Sie betreffen den Betrieb:
 
 - **Ergebnisdateien erst am Ende:** Ein Fehler beendet den Lauf (siehe oben). Fertige Seeds warten in Stufe 3 auf die übrigen, also erscheinen die `seed_<n>.json` erst am Ende der Stufen 1 und 2.
 - **Quelldateien während eines Laufs:** Der Fingerabdruck wird am Anfang bzw. Ende eines Auftrags von der Platte gelesen. Wer Code während eines laufenden Laufs ändert, bekommt Zwischenstände mit falscher Herkunft. Nicht tun.
-- **M3-A im Lauftest:** Die Lauf-Tests (`TINY`) lassen M3-A weg. Vor-Öffnen und δ-Kalibrierung für M3-A (1192 Kandidaten) in `phase1` laufen in den Tests nicht durch; der Pilot ist der erste volle Lauf damit. Ein Fehler dort wird gemeldet, nicht umgangen.
+- **M3-A im Lauftest:** Die Lauf-Tests (`TINY`) lassen M3-A weg. In den echten Läufen (Pilot, 500–504, 510–514) liefen Vor-Öffnen und δ-Kalibrierung für M3-A fehlerfrei durch.
+- **Container-Neustarts:** Während der Bestätigung 510–514 wurde der Container zweimal neu gestartet. Die Fortsetzung mit demselben Befehl hat Vorbereitung und fertige Bedingungen übernommen.
+  - Nach den Neustarts meldete der Container eine andere CPU.
+  - Läuft der Hauptlauf auf anderer Hardware weiter, verhindert der Fingerabdruck ein Mischen, die Arbeit wird neu gerechnet.
+  - Den Hauptlauf daher möglichst auf einer stabilen Maschine starten.
 - **Testlücke ohne bekannten Code-Fehler:** Die P1b-Tests prüfen nicht gegen Informationslecks (z. B. eine Darstellung, die Episoden auswendig lernt). Dass der Rest der Testzeilen mit den **Trainings**koeffizienten berechnet wird (Plan v2, Festlegung 3) und dass die Kriterien 2 und 3 der Bestätigung nur M3-B zählen, legen seit der Fix-Welle eigene Tests fest.
 - **Aufräumtest in anderer Umgebung:** `test_staged_run_resumes_from_partial_work_files` (langsam) scheiterte in der Umgebung des Nutzers (Python 3.12, numpy 2.5.3) an wieder auftauchenden Dateien in `.work`, auch auf dem Ausgangscommit (REVIEW-2026-10-04). Hier (Python 3.11.15, numpy 2.4.6) besteht er wiederholt, mit altem und neuem Treiber; eine Ursache im Code ist nicht gefunden (kein Arbeitsprozess überlebt eine Stufe). Tritt so etwas bei einem echten Lauf auf: anhalten und melden.
 
