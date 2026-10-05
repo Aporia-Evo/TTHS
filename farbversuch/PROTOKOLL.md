@@ -63,3 +63,57 @@ Keine weitere Änderung. Die Pilot-Konfiguration ist damit fertig.
   - Bei 500 öffnet M3-B unter `red` zusätzlich „Farbe 3“ (Gewinn 0,0005, knapp über δ 0,0005).
 
 Die Seeds 500–504 sind verbraucht. Eine weitere Runde läuft nur auf neuen Seeds (510–514 usw.). Details: `results/confirm_report.md`.
+
+## 2. Routine-Training per Evolution: wd, lr, epochs, init_std, n_teacher_episodes (04./05.10.2026)
+
+**Grund:** P1 scheiterte in der Bestätigung 500–504 an der Farbinvarianz. Sie lag dort zwischen 0,939 und 0,980. Dazu kam ein instabiles Training: Die Trefferquote auf den Lehrerdaten schwankte zwischen Seeds und benachbarten Einstellungen von 0,65 bis 0,91.
+
+**Entwicklungsdaten:** die verbrauchten Seeds 0 und 500–504. Für eine Bestätigung zählen sie nicht mehr.
+
+**Auswahlregel, vor dem Ansehen der Ergebnisse festgelegt:** Auf allen 6 Seeds muss gelten:
+- Farbinvarianz ≥ 0,96, also 0,01 Abstand zur Schwelle;
+- Trefferquote der Routine auf den Lehrerdaten ≥ 0,90;
+- P1b erfüllt.
+
+**Schritt 1, Raster** (nur die Prämisse, alle 6 Seeds; Daten in `results/evo/screening_wd_teacher.jsonl`). Keine Variante erfüllt die Regel.
+
+| Variante | Prämisse | Invarianz min | Trefferquote min |
+|---|---|---|---|
+| wd 0,015 | 2/6 | 0,939 | 0,65 |
+| wd 0,02 | 4/6 | 0,917 | 0,70 |
+| n_teacher 8000 | 5/6 | 0,940 | 0,74 |
+| n_teacher 8000 + wd 0,015 | 6/6 | 0,954 | 0,80 |
+
+**Schritt 2, Evolution:** Vorschlag des Nutzers, freigegeben mit „wenn man schon nah dran ist lohnt evolvieren oft“. Skript, Log und alle Kandidaten liegen in `results/evo/`.
+- **Verfahren:** (2+4)-Evolution, höchstens 8 Generationen.
+- **Mutation:** log-normal auf `wd`, `lr`, `epochs` und `init_std`. `n_teacher_episodes` wechselt mit Wahrscheinlichkeit 0,3 zwischen 4000, 6000 und 8000.
+- **Fitness (vorab festgelegt):** min über die 6 Seeds von min(Invarianz − 0,96; Trefferquote − 0,90). Ziel war ≥ +0,005.
+- **Start:** die bisherige Konfiguration und n_teacher 8000 + wd 0,015.
+- **Verlauf der besten Fitness:**
+
+  | Generation | 0 | 1 | 3 | 4 | 6 | 8 |
+  |---|---|---|---|---|---|---|
+  | Fitness | −0,098 | −0,030 | −0,016 | −0,006 | +0,002 | +0,0068 |
+
+  In Generation 8 ist das Ziel erreicht. Insgesamt wurden 34 Kandidaten bewertet.
+
+**Sieger:** wd 0,0203, lr 0,1535, epochs 500, init_std 0,00772, n_teacher_episodes 8000.
+
+**Volle Prämissenprüfung des Siegers auf den 6 Entwicklungs-Seeds:**
+
+| Seed | Invarianz | Trefferquote | Vorwärts / Häufigkeit | Restanteil | Verschiebung | Prämisse |
+|---|---|---|---|---|---|---|
+| 0 | 0,974 | 0,909 | 0,634 / 1,382 | −0,017 | 0,087 | erfüllt |
+| 500 | 0,977 | 0,910 | 0,717 / 1,415 | −0,040 | 0,074 | erfüllt |
+| 501 | 0,973 | 0,909 | 0,672 / 1,446 | 0,014 | 0,083 | erfüllt |
+| 502 | 0,967 | 0,909 | 0,602 / 1,334 | 0,045 | 0,086 | erfüllt |
+| 503 | 0,967 | 0,912 | 0,603 / 1,436 | −0,025 | 0,114 | erfüllt |
+| 504 | 0,975 | 0,907 | 0,639 / 1,400 | 0,046 | 0,077 | erfüllt |
+
+**Deutung (Annahme):** Die Lernrate 0,5 war zu groß für Full-Batch-Training. Mit lr ≈ 0,15 und 500 Epochen konvergiert das Training gleichmäßig, die Trefferquote liegt auf allen Seeds bei ≈ 0,91. Doppelt so viele Lehrerdaten verringern zufällige Zusammenhänge zwischen Farbe und Aktion, der stärkere Weight Decay drückt die Farbgewichte.
+
+**Kopplung:** Alle fünf Größen wirken nur auf das Training der Routine, nicht auf das Erklären und nicht auf die P1b-Messung.
+
+**Freigabe:** `n_teacher_episodes` gehört zu den Größen, die nur nach Rückfrage geändert werden; der Nutzer hat es freigegeben. Die Übernahme und die Bestätigung auf den Seeds 510–514 hat der Nutzer am 05.10.2026 freigegeben.
+
+**Offener Punkt (Idee des Nutzers):** Für eine Invarianz von 1,0 fehlt dem Modell ein Sparsamkeitsdruck, zum Beispiel Gruppen-Lasso je Eingabebit. Das wäre eine Codeänderung und ist nicht Teil dieser Konfiguration.

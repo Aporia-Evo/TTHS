@@ -1,0 +1,70 @@
+"""(2+4)-Evolution der Routine-Trainingsparameter auf den Entwicklungs-Seeds 0, 500-504.
+Fitness (vorab festgelegt) = min über Seeds von min(inv - 0.96, acc - 0.90); >= 0 heißt Regel erfüllt."""
+import json, math, subprocess, sys
+import numpy as np
+from concurrent.futures import ThreadPoolExecutor
+
+SEEDS = (0, 500, 501, 502, 503, 504)
+BOUNDS = {"wd": (0.003, 0.05), "lr": (0.1, 3.0), "epochs": (500, 3000), "init_std": (0.001, 0.1)}
+SIGMA = {"wd": 0.3, "lr": 0.3, "epochs": 0.25, "init_std": 0.4}
+TEACHER = (4000, 6000, 8000)
+MAX_GEN, LAMBDA, MU = 8, 4, 2
+rs = np.random.default_rng(20261004)
+cache = {}
+
+def key(p): return json.dumps(p, sort_keys=True)
+
+def run_one(job):
+    p, s = job
+    out = subprocess.run([sys.executable, "evalr.py", json.dumps(p), str(s)], capture_output=True, text=True)
+    try:
+        return key(p), json.loads(out.stdout.strip().splitlines()[-1])
+    except Exception:
+        return key(p), {"seed": s, "error": out.stderr[-300:]}
+
+def evaluate(cands):
+    todo = [c for c in cands if key(c) not in cache]
+    jobs = [(c, s) for c in todo for s in SEEDS]
+    res = {key(c): [] for c in todo}
+    with ThreadPoolExecutor(4) as ex:
+        for k, r in ex.map(run_one, jobs):
+            res[k].append(r)
+    for c in todo:
+        rows = res[key(c)]
+        if any("error" in r for r in rows):
+            cache[key(c)] = {"params": c, "fitness": -9.0, "rows": rows}
+            continue
+        f = min(min(r["inv"] - 0.96, r["acc"] - 0.90) for r in rows)
+        cache[key(c)] = {"params": c, "fitness": f, "min_inv": min(r["inv"] for r in rows),
+                         "min_acc": min(r["acc"] for r in rows), "max_shift": max(r["shift"] for r in rows), "rows": rows}
+    return [cache[key(c)] for c in cands]
+
+def mutate(p):
+    q = dict(p)
+    for name, (lo, hi) in BOUNDS.items():
+        v = math.exp(math.log(q[name]) + SIGMA[name] * rs.normal())
+        v = min(max(v, lo), hi)
+        q[name] = int(round(v / 100) * 100) if name == "epochs" else float(f"{v:.4g}")
+    if rs.random() < 0.3:
+        q["n_teacher_episodes"] = int(rs.choice(TEACHER))
+    return q
+
+def log(msg):
+    print(msg, flush=True)
+
+start = [{"wd": 0.015, "lr": 0.5, "epochs": 1000, "init_std": 0.01, "n_teacher_episodes": 8000},
+         {"wd": 0.01, "lr": 0.5, "epochs": 1000, "init_std": 0.01, "n_teacher_episodes": 4000}]
+parents = sorted(evaluate(start), key=lambda e: -e["fitness"])
+for e in parents:
+    log(f"GEN 0 f={e['fitness']:+.4f} inv_min={e['min_inv']:.3f} acc_min={e['min_acc']:.3f} {e['params']}")
+for g in range(1, MAX_GEN + 1):
+    kids = [mutate(parents[i % MU]["params"]) for i in range(LAMBDA)]
+    pool = parents + evaluate(kids)
+    parents = sorted({key(e["params"]): e for e in pool}.values(), key=lambda e: -e["fitness"])[:MU]
+    b = parents[0]
+    log(f"GEN {g} best f={b['fitness']:+.4f} inv_min={b['min_inv']:.3f} acc_min={b['min_acc']:.3f} shift_max={b['max_shift']:.3f} {b['params']}")
+    json.dump(sorted(cache.values(), key=lambda e: -e["fitness"]), open("evo_all.json", "w"), indent=1)
+    if b["fitness"] >= 0.005:
+        log("ZIEL ERREICHT")
+        break
+log("EVO FERTIG")

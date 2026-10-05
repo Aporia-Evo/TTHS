@@ -1,0 +1,16 @@
+import os, sys, json, time
+for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS"):
+    os.environ[v] = "1"
+sys.path.insert(0, "/home/user/TTHS")
+from dataclasses import replace
+from farbversuch.config import Config
+from farbversuch import run
+run._log = lambda msg: None
+variant = json.loads(sys.argv[1])
+cfg = replace(Config.from_json("/home/user/TTHS/farbversuch/pilot_config.json"), **variant)
+t0 = time.perf_counter()
+seed = int(sys.argv[2]); p1 = run.train_phase1(seed, cfg)
+X, A = run.teacher_data(seed, cfg)
+acc = float((p1.routine.act_batch(X) == A).mean())
+prem = run.premise_checks(seed, cfg, p1)
+print(json.dumps({"seed": seed, "variant": variant, "teacher_acc": round(acc, 4), **{k: (round(v, 4) if isinstance(v, float) else v) for k, v in prem.items()}, "sec": round(time.perf_counter() - t0)}))

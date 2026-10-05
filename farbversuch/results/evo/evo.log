@@ -1,0 +1,12 @@
+GEN 0 f=-0.0975 inv_min=0.954 acc_min=0.803 {'wd': 0.015, 'lr': 0.5, 'epochs': 1000, 'init_std': 0.01, 'n_teacher_episodes': 8000}
+GEN 0 f=-0.1305 inv_min=0.939 acc_min=0.769 {'wd': 0.01, 'lr': 0.5, 'epochs': 1000, 'init_std': 0.01, 'n_teacher_episodes': 4000}
+GEN 1 best f=-0.0303 inv_min=0.930 acc_min=0.877 shift_max=0.156 {'wd': 0.009523, 'lr': 0.2721, 'epochs': 600, 'init_std': 0.009142, 'n_teacher_episodes': 4000}
+GEN 2 best f=-0.0303 inv_min=0.930 acc_min=0.877 shift_max=0.156 {'wd': 0.009523, 'lr': 0.2721, 'epochs': 600, 'init_std': 0.009142, 'n_teacher_episodes': 4000}
+GEN 3 best f=-0.0159 inv_min=0.950 acc_min=0.884 shift_max=0.097 {'wd': 0.01434, 'lr': 0.4432, 'epochs': 500, 'init_std': 0.016, 'n_teacher_episodes': 8000}
+GEN 4 best f=-0.0061 inv_min=0.954 acc_min=0.910 shift_max=0.117 {'wd': 0.01414, 'lr': 0.225, 'epochs': 500, 'init_std': 0.01476, 'n_teacher_episodes': 8000}
+GEN 5 best f=-0.0061 inv_min=0.954 acc_min=0.910 shift_max=0.117 {'wd': 0.01414, 'lr': 0.225, 'epochs': 500, 'init_std': 0.01476, 'n_teacher_episodes': 8000}
+GEN 6 best f=+0.0020 inv_min=0.962 acc_min=0.906 shift_max=0.129 {'wd': 0.01884, 'lr': 0.1398, 'epochs': 500, 'init_std': 0.01052, 'n_teacher_episodes': 8000}
+GEN 7 best f=+0.0020 inv_min=0.962 acc_min=0.906 shift_max=0.129 {'wd': 0.01884, 'lr': 0.1398, 'epochs': 500, 'init_std': 0.01052, 'n_teacher_episodes': 8000}
+GEN 8 best f=+0.0068 inv_min=0.967 acc_min=0.907 shift_max=0.114 {'wd': 0.0203, 'lr': 0.1535, 'epochs': 500, 'init_std': 0.00772, 'n_teacher_episodes': 8000}
+ZIEL ERREICHT
+EVO FERTIG
