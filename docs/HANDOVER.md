@@ -12,6 +12,11 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf d
   - **Abbruchkriterium ausgelöst:** M3-B öffnet bei `global` in 4/10 Seeds ein Merkmal, das Kriterium greift ab mehr als 3.
 - **Bericht:** `farbversuch/BERICHT.md` (Gliederung nach Spec v2 §11).
 - **Weiter:** Was jetzt noch geändert oder untersucht wird, ist nachträgliche Erkundung oder eine neue Version (v3) und muss auf frischen Seeds geprüft werden. Die Seeds 400–409 sind verbraucht.
+- **Nachträgliche Diagnose und v3-Entwurf (06.10.2026):**
+  - Diagnose der M3-B-Fehlöffnungen auf 400–409: `farbversuch/results/nachtrag_diagnose/`, PROTOKOLL letzter Abschnitt, BERICHT §5.
+  - v3-Entwurf, nicht freigegeben: `docs/superpowers/specs/2026-10-06-farb-wiederoeffnung-v3-design.md`.
+  - Die offenen Entscheidungen E1–E7 stehen in dessen §12.
+  - Bis zur Freigabe gilt: keine Umsetzung, keine Läufe auf frischen Seeds (vorgesehen 520–524 und 600–609), kein Einfrieren.
 
 Die folgenden Punkte beschreiben den Stand vor dem Hauptlauf und bleiben als Referenz stehen.
 
