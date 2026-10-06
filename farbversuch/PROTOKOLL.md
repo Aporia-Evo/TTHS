@@ -294,3 +294,40 @@ Der Fingerabdruck ist identisch mit dem der Bestätigung 510–514 (`51ddfec…`
   - S1-A schreibt in 8/10 Seeds richtig zu.
 
 An Code, Konfiguration, Schwellen und Auswertung wurde nichts geändert. Die Seeds 400–409 sind verbraucht.
+
+## Nachträgliche Erkundung: Diagnose der M3-B-Fehlöffnungen (06.10.2026)
+
+**Nachträgliche Erkundung nach Spec v2 §8.6** auf den verbrauchten Seeds 400–409. Am v2-Ergebnis ändert sie nichts. Code, Konfiguration und `freeze.sha256` sind unverändert; `freeze verify`: OK.
+
+**Ablauf:**
+- **Skript:** `results/nachtrag_diagnose/diag.py.txt`. Es ändert nichts am Repo.
+- **Lauf:** im Arbeitsordner, je Seed ein Prozess mit einem BLAS-Thread, bis zu 4 gleichzeitig, je etwa 16 Minuten.
+- **Neu gerechnet:** Phase 1 nur für M3-B, also Routine, Vorwärtsmodell, Übungs-Ontologie, Null-Ströme, δ und `p_global`, alles deterministisch mit den Seeds des Hauptlaufs. Ein neues Training mit anderen Einstellungen ist das nicht.
+- **Neue Zufallsströme** gab es nur für den Großtest, mit eigenem Tag 99.
+
+**Ergebnis (Rohdaten `results/nachtrag_diagnose/out_*.json`):**
+- **Nachbau exakt:** Übungs-Ontologie, δ, `p_global` und jede Öffnung unter `global` und `red` nach Merkmal, Episode und Gewinn.
+- **Großtest `global`** (3000 Episoden je Seed): Kein Kandidat ist in allen Teilungen positiv, der größte mittlere Gewinn ist 0,00011.
+- **Erzwungenes Erklären** auf den 20 Null-Strömen von E = 110 bis 400:
+  - Mit dem v2-δ öffnen 5–17 von 20 Strömen etwas (Teilung nach Zeilen), bei Teilung nach Episoden 11–18.
+  - Serien-δ: Zeilen 0,0023–0,0037, Episoden 0,0037–0,0068.
+- **Adaptive Nachspielung mit Serien-δ**, bei gleicher Teilung für Gewinn und Schwelle:
+  - `global`: 0/10 Seeds mit Öffnung;
+  - `red`: 10/10 erste Öffnung „Farbe 0“, keine Zusatzöffnung;
+  - Latenz im Mittel 49 (Zeilen) bzw. 54 (Episoden).
+- **Nicht gerechnet:**
+  - Prüfpunkte vor E = 110, zulässig wären 37–38 je Strom ab E = 30/40;
+  - `walls` und `none`;
+  - M3-A, S1-B und S1-A;
+  - Zusatzöffnungen mit eigener Basis.
+
+**Einordnung:** Die Regel wurde auf denselben Seeds abgeleitet und angesehen. Das ist keine Evidenz für eine v3.
+
+**Korrektur einer früheren mündlichen Aussage:** Der Vergleich „Episodenteilung macht δ doppelt so groß (0,0062) und verfehlt damit den kleinsten echten Gewinn (0,0041)“ verglich Größen aus verschiedenen Teilungen. Er ist ungültig.
+
+**Weiter:**
+- Entwurf `docs/superpowers/specs/2026-10-06-farb-wiederoeffnung-v3-design.md`; offene Entscheidungen dort in §12.
+- Für eine v3 vorgesehen: 520–524 (Bestätigung) und 600–609 (Hauptlauf).
+- Nichtnutzung am 06.10.2026 geprüft:
+  - Ergebnisordner, Git-Historie, alle Befehlsprotokolle dieser Sitzung und ihrer Teilagenten sowie der Arbeitsordner;
+  - beide Bereiche kommen nur als vorgeschlagene Nummern in Texten vor.

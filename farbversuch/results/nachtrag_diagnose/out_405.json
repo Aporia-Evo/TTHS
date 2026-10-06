@@ -1,0 +1,1570 @@
+{
+ "seed": 405,
+ "check": {
+  "practice_ok": true,
+  "delta_ok": true,
+  "pg_ok": true
+ },
+ "delta0": 0.0,
+ "p_global": 0.24062500000000003,
+ "practice": [
+  "Wand"
+ ],
+ "main_opened": {
+  "global": [
+   "Farbe 0"
+  ],
+  "red": [
+   "Farbe 0",
+   "Farbe 3"
+  ]
+ },
+ "null_row": [
+  {
+   "max": 0.0028089699125456113,
+   "n_pos_rounds": 4,
+   "n_rounds": 30,
+   "n_over_delta0": 4
+  },
+  {
+   "max": 0.002170211445971337,
+   "n_pos_rounds": 3,
+   "n_rounds": 30,
+   "n_over_delta0": 3
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.0009687006703654188,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.0006647759533992658,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0011785765677410631,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.001036578583092651,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0005169454554624697,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0010132964128923172,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.002280485358481121,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.0018139999849105305,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.0007601577841944374,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0011147901514801661,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0024660618069180075,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.0025958483956956767,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.00036448993096355187,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0024188280651442295,
+   "n_pos_rounds": 5,
+   "n_rounds": 30,
+   "n_over_delta0": 5
+  },
+  {
+   "max": 0.0010388968358143625,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  }
+ ],
+ "null_ep": [
+  {
+   "max": 0.0008890729070054504,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0019656282515391754,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0020942460801681717,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.001779766229477775,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0012374745170334878,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.000964008936647065,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0016041388314651627,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.002068583519911149,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.004004717084864362,
+   "n_pos_rounds": 3,
+   "n_rounds": 30,
+   "n_over_delta0": 3
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.006162148955466773,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  },
+  {
+   "max": 0.0025180033877139963,
+   "n_pos_rounds": 2,
+   "n_rounds": 30,
+   "n_over_delta0": 2
+  },
+  {
+   "max": 0.0007448729885105143,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.002073267948653146,
+   "n_pos_rounds": 1,
+   "n_rounds": 30,
+   "n_over_delta0": 1
+  },
+  {
+   "max": 0.0,
+   "n_pos_rounds": 0,
+   "n_rounds": 30,
+   "n_over_delta0": 0
+  }
+ ],
+ "d_series_row": 0.0028089699125456113,
+ "d_series_ep": 0.006162148955466773,
+ "deploy": {
+  "global": {
+   "R0_ist": {
+    "opened": [
+     "Farbe 0"
+    ],
+    "rounds": [
+     {
+      "E": 120,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 130,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 140,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 150,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 160,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 170,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 180,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 190,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 200,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": "Farbe 0",
+      "gain": 0.0013836191040343282,
+      "opened": "Farbe 0"
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   },
+   "R1_ep": {
+    "opened": [],
+    "rounds": [
+     {
+      "E": 120,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 130,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 140,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 150,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 160,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 170,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 180,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 190,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 200,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   },
+   "R2_row_series": {
+    "opened": [],
+    "rounds": [
+     {
+      "E": 120,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 130,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 140,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 150,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 160,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 170,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 180,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 190,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 200,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": "Farbe 0",
+      "gain": 0.0013836191040343282
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   },
+   "R3_ep_series": {
+    "opened": [],
+    "rounds": [
+     {
+      "E": 120,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 130,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 140,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 150,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 160,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 170,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 180,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 190,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 200,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   }
+  },
+  "red": {
+   "R0_ist": {
+    "opened": [
+     "Farbe 0",
+     "Farbe 3"
+    ],
+    "rounds": [
+     {
+      "E": 200,
+      "best": "Farbe 0",
+      "gain": 0.04054091514459801,
+      "opened": "Farbe 0"
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": "Farbe 3",
+      "gain": 0.0010169942702454083,
+      "opened": "Farbe 3"
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   },
+   "R1_ep": {
+    "opened": [
+     "Farbe 0",
+     "Farbe 3"
+    ],
+    "rounds": [
+     {
+      "E": 200,
+      "best": "Farbe 0",
+      "gain": 0.045597378293040655,
+      "opened": "Farbe 0"
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": "Farbe 3",
+      "gain": 0.001189278539148586,
+      "opened": "Farbe 3"
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   },
+   "R2_row_series": {
+    "opened": [
+     "Farbe 0"
+    ],
+    "rounds": [
+     {
+      "E": 200,
+      "best": "Farbe 0",
+      "gain": 0.04054091514459801,
+      "opened": "Farbe 0"
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": "Farbe 3",
+      "gain": 0.0010169942702454083
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   },
+   "R3_ep_series": {
+    "opened": [
+     "Farbe 0"
+    ],
+    "rounds": [
+     {
+      "E": 200,
+      "best": "Farbe 0",
+      "gain": 0.045597378293040655,
+      "opened": "Farbe 0"
+     },
+     {
+      "E": 210,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 220,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 230,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 240,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 250,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 260,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 270,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 280,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 290,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 300,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 310,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 320,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 330,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 340,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 350,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 360,
+      "best": "Farbe 3",
+      "gain": 0.001189278539148586
+     },
+     {
+      "E": 370,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 380,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 390,
+      "best": null,
+      "gain": null
+     },
+     {
+      "E": 400,
+      "best": null,
+      "gain": null
+     }
+    ]
+   }
+  }
+ },
+ "h3": {
+  "global": {
+   "ep": {
+    "Farbe 0": {
+     "mean": -8.110563995522568e-06,
+     "allpos": false,
+     "folds": [
+      1.2e-05,
+      0.0,
+      -6.9e-05,
+      2.2e-05,
+      -7e-06
+     ]
+    },
+    "Farbe 1": {
+     "mean": -1.2001892498147982e-05,
+     "allpos": false,
+     "folds": [
+      1.1e-05,
+      -3.9e-05,
+      -0.000146,
+      9.6e-05,
+      1.8e-05
+     ]
+    },
+    "Farbe 2": {
+     "mean": -0.00011617934220082837,
+     "allpos": false,
+     "folds": [
+      -2.2e-05,
+      -0.000327,
+      -0.000151,
+      -0.000101,
+      2.1e-05
+     ]
+    },
+    "Farbe 3": {
+     "mean": 4.0810304689520295e-05,
+     "allpos": false,
+     "folds": [
+      0.000137,
+      0.000166,
+      -0.000159,
+      0.000145,
+      -8.5e-05
+     ]
+    },
+    "Ziel": {
+     "mean": 8.496603177765572e-06,
+     "allpos": false,
+     "folds": [
+      -2e-05,
+      -6e-06,
+      2.5e-05,
+      4.9e-05,
+      -5e-06
+     ]
+    }
+   },
+   "row": {
+    "Farbe 0": {
+     "mean": -3.4171974136221193e-05,
+     "allpos": false,
+     "folds": [
+      1.6e-05,
+      -0.000169,
+      -0.000137,
+      6.5e-05,
+      5.4e-05
+     ]
+    },
+    "Farbe 1": {
+     "mean": -4.215271883207805e-05,
+     "allpos": false,
+     "folds": [
+      -8.1e-05,
+      -4e-06,
+      -0.000273,
+      9.8e-05,
+      4.9e-05
+     ]
+    },
+    "Farbe 2": {
+     "mean": -4.423726073887746e-05,
+     "allpos": false,
+     "folds": [
+      1.5e-05,
+      2.1e-05,
+      -2.4e-05,
+      -8e-05,
+      -0.000152
+     ]
+    },
+    "Farbe 3": {
+     "mean": -6.867325974102556e-06,
+     "allpos": false,
+     "folds": [
+      0.000209,
+      -0.000265,
+      -0.000118,
+      0.000207,
+      -6.7e-05
+     ]
+    },
+    "Ziel": {
+     "mean": -2.010472712485889e-05,
+     "allpos": false,
+     "folds": [
+      -5.3e-05,
+      -2.5e-05,
+      -1e-05,
+      -2.3e-05,
+      1e-05
+     ]
+    }
+   },
+   "n_rows": 51635
+  },
+  "red": {
+   "ep": {
+    "Farbe 0": {
+     "mean": 0.065716016520278,
+     "allpos": true,
+     "folds": [
+      0.067168,
+      0.066574,
+      0.060071,
+      0.073534,
+      0.061232
+     ]
+    },
+    "Farbe 1": {
+     "mean": 0.011934913469779462,
+     "allpos": true,
+     "folds": [
+      0.011817,
+      0.012202,
+      0.010944,
+      0.013183,
+      0.011529
+     ]
+    },
+    "Farbe 2": {
+     "mean": 0.009805742272418882,
+     "allpos": true,
+     "folds": [
+      0.009315,
+      0.010988,
+      0.008381,
+      0.011916,
+      0.008429
+     ]
+    },
+    "Farbe 3": {
+     "mean": 0.012498352719694706,
+     "allpos": true,
+     "folds": [
+      0.01335,
+      0.010548,
+      0.012535,
+      0.014036,
+      0.012023
+     ]
+    },
+    "Ziel": {
+     "mean": 4.1308581304400074e-05,
+     "allpos": false,
+     "folds": [
+      -0.000162,
+      0.000119,
+      6.1e-05,
+      8.2e-05,
+      0.000106
+     ]
+    }
+   },
+   "row": {
+    "Farbe 0": {
+     "mean": 0.06540982472269788,
+     "allpos": true,
+     "folds": [
+      0.06609,
+      0.066718,
+      0.064724,
+      0.062902,
+      0.066615
+     ]
+    },
+    "Farbe 1": {
+     "mean": 0.011836568659536195,
+     "allpos": true,
+     "folds": [
+      0.011748,
+      0.012535,
+      0.011773,
+      0.01132,
+      0.011807
+     ]
+    },
+    "Farbe 2": {
+     "mean": 0.009815579407085172,
+     "allpos": true,
+     "folds": [
+      0.010504,
+      0.009477,
+      0.01006,
+      0.009569,
+      0.009468
+     ]
+    },
+    "Farbe 3": {
+     "mean": 0.012453531783188088,
+     "allpos": true,
+     "folds": [
+      0.012243,
+      0.012811,
+      0.011823,
+      0.012353,
+      0.013038
+     ]
+    },
+    "Ziel": {
+     "mean": 7.802100147771273e-05,
+     "allpos": false,
+     "folds": [
+      8.7e-05,
+      -2.1e-05,
+      0.000138,
+      -5.1e-05,
+      0.000237
+     ]
+    }
+   },
+   "n_rows": 49347
+  }
+ },
+ "sec": 960
+}

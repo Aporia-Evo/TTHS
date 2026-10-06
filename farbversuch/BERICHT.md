@@ -152,6 +152,7 @@ Alle Aussagen in diesem Abschnitt sind Annahmen. Geprüft ist nur, was in Abschn
 3. **Vermutete Ursache, nicht geprüft:** Die Fehlöffnungen haben kleine Gewinne und kommen erst nach mehreren Erklärrunden. δ ist dagegen pro einzelner Erklärung aus einem Endpuffer je Null-Strom kalibriert und war in der Hälfte der Seeds 0.
    - Annahme: Das wiederholte Erklären nach dem Bemerken, etwa 20–30 Runden je Strom, wirkt als nicht korrigierte Mehrfachprüfung. Gegen die Zeilenabhängigkeit der Kreuzvalidierung ist das nicht abgesichert.
    - Dagegen spricht: Im Bestätigungslauf (Seed 510) gab es eine Fehlöffnung schon beim ersten Erklären, mit δ > 0. Die Ursache ist also möglicherweise nicht allein die Mehrfachprüfung.
+   - Nachträglich auf denselben Seeds teilweise untersucht, siehe Abschnitt 5.
 4. **Arm B gegen Arm A:**
    - M3-B trifft 10/10, M3-A 5/10.
    - Annahme: Ein großer Teil der Treffsicherheit kommt von der räumlichen Strukturvorgabe der 6 Zielzellen-Merkmale, nicht vom Verfahren allein.
@@ -190,9 +191,25 @@ Einzelheiten stehen in `PROTOKOLL.md`.
 - **510–514 (Endkonfiguration):** gemeinsame 4/5-Regel erfüllt, Prämisse 5/5. Eine Fehlöffnung „Farbe 0“ unter `global` (Seed 510) gab es schon dort.
 - 505–509 liefen nicht.
 
-**Nachträgliche Erkundungen:** keine durchgeführt.
-- **Möglich für eine v3:**
-  - δ über die ganze Erklärserie eines Null-Stroms kalibrieren statt über einen Endpuffer;
-  - die Kreuzvalidierung nach Episoden teilen;
-  - eine Mindestverbesserung relativ zur Stärke der bemerkten Änderung.
-- **Bedingungen:** Jede solche Änderung ist eine neue Version. Sie braucht frische Bestätigungs- und Hauptlauf-Seeds, die Seeds 400–409 sind verbraucht.
+**Nachträgliche Erkundungen** (nach dem Hauptlauf, auf den verbrauchten Seeds 400–409; sie ändern nichts an den Abschnitten 2–4):
+- **Diagnose der M3-B-Fehlöffnungen (06.10.2026).**
+  - Daten und Skript liegen in `results/nachtrag_diagnose/`.
+  - Gerechnet wurde nur M3-B, und nur unter `global` und `red`.
+  - **Nachbau:** exakt. Jede Öffnung stimmt nach Merkmal, Episode und Gewinn mit dem Hauptlauf überein.
+  - **Großtest** mit 3000 Episoden `global` je Seed:
+    - Kein Kandidat ist in allen Teilungen positiv. Der größte mittlere Gewinn ist 0,00011.
+    - Die Fehlöffnungen hatten Gewinne von 0,0014–0,0017. Ein echter Effekt dieser Größe liegt nicht vor.
+  - **Erzwungenes Erklären** auf den 20 Null-Strömen, alle 10 Episoden ab Episode 110:
+    - Mit dem v2-δ öffnen 5–17 von 20 Strömen irgendwann etwas.
+    - Mit einem über diese Serie kalibrierten δ, bei gleicher Teilung für Gewinn und Schwelle, ergibt die adaptive Nachspielung:
+      - unter `global` 0/10 Seeds mit Öffnung;
+      - unter `red` 10/10 richtig, ohne Zusatzöffnungen.
+    - Das gilt für die Teilung nach Zeilen wie nach Episoden.
+  - **Grenzen:**
+    - Die Prüfpunkte vor Episode 110 fehlen.
+    - `walls`, `none` und die anderen Systeme sind nicht gerechnet.
+    - Zusatzöffnungen sind nicht eigens kalibriert.
+    - Die Regel wurde auf denselben Seeds abgeleitet, auf denen sie hier geprüft wurde. Das ist keine Evidenz für eine v3.
+- **Weiter:**
+  - Entwurf einer v3: `docs/superpowers/specs/2026-10-06-farb-wiederoeffnung-v3-design.md`. Er enthält auch die vollständige Liste, was die Diagnose belegt und was nicht.
+  - Jede Änderung ist eine neue Version. Sie braucht frische Bestätigungs- und Hauptlauf-Seeds, die Seeds 400–409 sind verbraucht.

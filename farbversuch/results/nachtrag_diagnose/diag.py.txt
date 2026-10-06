@@ -1,0 +1,123 @@
+"""WEGWERF-SPIKE (nachträgliche Erkundung): Ursache der M3-B-Fehlöffnungen unter `global`. Ändert nichts am Repo."""
+import os, sys, json, time
+for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS"):
+    os.environ[v] = "1"
+sys.path.insert(0, "/home/user/TTHS")
+from dataclasses import replace
+import numpy as np
+from farbversuch.config import Config
+from farbversuch import run, monitor
+from farbversuch.monitor import m3_improvements, select_m3, candidates_B, CAND_B_NAMES
+from farbversuch.seeds import rng as mkrng, CV, NULL, episode_rngs
+from farbversuch.world import make_map, rollout
+
+run._log = lambda m: None
+SEED = int(sys.argv[1])
+cfg = replace(Config.from_json("/home/user/TTHS/farbversuch/frozen_config.json"), systems=("M3-B",))
+res_main = json.load(open(f"/home/user/TTHS/farbversuch/results/main/seed_{SEED}.json"))
+t0 = time.time()
+p1 = run.calibrate_phase1(SEED, cfg, run.train_phase1(SEED, cfg))
+pg = run.find_p_global(SEED, cfg, p1)["p_global"]
+practice = list(p1.practice["M3-B"]); delta0 = p1.deltas["M3-B"]
+check = {"practice_ok": practice == [e["cand"] for e in res_main["practice"]["M3-B"]],
+         "delta_ok": abs(delta0 - res_main["delta"]["M3-B"]) < 1e-12, "pg_ok": abs(pg - res_main["p_global"]["p_global"]) < 1e-12}
+fit_kw = dict(l2=cfg.fwd_l2, n_folds=cfg.n_folds, tol=cfg.logreg_tol, max_iter=cfg.logreg_max_iter)
+enc = p1.routine.encode
+N = cfg.buffer_size
+
+# --- Teilung nach Episoden: cv_folds im Modul monitor ersetzen (nur in diesem Prozess) ---
+_orig_cv = monitor.cv_folds
+EP = {"ids": None}
+def ep_folds(n, rng, n_folds=5):
+    ids = EP["ids"]; assert len(ids) == n
+    u = np.unique(ids); groups = np.array_split(rng.permutation(u), n_folds)
+    return [np.flatnonzero(np.isin(ids, g)) for g in groups]
+def imp_of(Z, A, D, F, known, r, mode, ids):
+    if mode == "ep":
+        EP["ids"] = ids; monitor.cv_folds = ep_folds
+    try:
+        imp, cand = m3_improvements(Z, A, D, F, known, r, **fit_kw)
+    finally:
+        monitor.cv_folds = _orig_cv
+    return imp, cand
+
+def stream(trajs):
+    """Ring der letzten N Schritte mit Episoden-IDs; liefert je Prüfpunkt (E, obs, A, D, ids)."""
+    obs, A, D, ids = [], [], [], []
+    for e, t in enumerate(trajs):
+        obs.append(t.obs); A.append(t.actions); D.append(t.disps); ids.append(np.full(len(t.actions), e))
+        E = e + 1
+        if E % cfg.check_interval == 0:
+            O = np.concatenate(obs)[-N:]; a = np.concatenate(A)[-N:]; d = np.concatenate(D)[-N:]; i = np.concatenate(ids)[-N:]
+            yield E, O, a, d, i
+            # Speicher klein halten
+            keep = np.cumsum([len(x) for x in A[::-1]])
+            k = int(np.searchsorted(keep, N)) + 1
+            obs, A, D, ids = obs[-k:], A[-k:], D[-k:], ids[-k:]
+
+def null_series(mode):
+    """Erzwungenes Erklären ab E=110 alle 10 Episoden auf den 20 Null-Strömen; je Strom max. Null-Gewinn."""
+    out = []
+    for j in range(cfg.n_null_streams):
+        trajs = [t for _, t in run.routine_rollouts(p1.routine, SEED, NULL, cfg.n_null_episodes, cfg, p_slip=cfg.p_slip, stream=j)]
+        best, gains = 0.0, []
+        for E, O, a, d, i in stream(trajs):
+            if E < 110: continue
+            imp, cand = imp_of(enc(O), a, d, candidates_B(O, a), practice, mkrng(SEED, CV, E), mode, i)
+            el = (imp > 0).all(axis=1); g = float(imp[el].mean(axis=1).max()) if el.any() else 0.0
+            gains.append(g); best = max(best, g)
+        out.append({"max": best, "n_pos_rounds": int(sum(g > 0 for g in gains)), "n_rounds": len(gains),
+                    "n_over_delta0": int(sum(g > delta0 for g in gains))})
+    return out
+
+def deploy_rules(cond, rules):
+    """Adaptive Öffnungsfolge je Regel (mode, delta) ab dem tatsächlich bemerkten Prüfpunkt."""
+    noticed = res_main["conditions"][cond]["M3-B"]["noticed"]
+    trajs = list(run.stream_episodes(SEED, cfg, p1, pg, cond))
+    out = {}
+    for name, (mode, dlt) in rules.items():
+        opened, log = [], []
+        if noticed is None:
+            out[name] = {"opened": [], "rounds": []}; continue
+        for E, O, a, d, i in stream(trajs):
+            if E < noticed or len(opened) >= cfg.max_open: continue
+            imp, cand = imp_of(enc(O), a, d, candidates_B(O, a), practice + opened, mkrng(SEED, CV, E), mode, i)
+            means = imp.mean(axis=1); allpos = (imp > 0).all(axis=1)
+            j = int(np.argmax(np.where(allpos, means, -np.inf))) if allpos.any() else None
+            log.append({"E": E, "best": None if j is None else CAND_B_NAMES[int(cand[j])], "gain": None if j is None else float(means[j])})
+            c = select_m3(imp, cand, dlt)
+            if c is not None:
+                opened.append(int(c))
+                log[-1]["opened"] = CAND_B_NAMES[int(c)]
+        out[name] = {"opened": [CAND_B_NAMES[c] for c in opened], "rounds": log}
+    return out
+
+ns_row = null_series("row"); ns_ep = null_series("ep")
+d_series_row = max(s["max"] for s in ns_row); d_series_ep = max(s["max"] for s in ns_ep)
+rules = {"R0_ist": ("row", delta0), "R1_ep": ("ep", delta0), "R2_row_series": ("row", d_series_row),
+         "R3_ep_series": ("ep", d_series_ep)}
+dep = {c: deploy_rules(c, rules) for c in ("global", "red")}
+
+# --- H3: großer global-Datensatz (nur nach dem Wechsel), Teilung nach Episoden ---
+def big(cond_slip, red, n_ep=3000, tag=99):
+    trajs = []
+    for e in range(n_ep):
+        mr, dr = episode_rngs(SEED, tag, 0, e)
+        m = make_map(mr, cfg.wall_p, cfg.min_dist)
+        trajs.append(rollout(m, lambda o, pos: p1.routine.act(o), dr, cond_slip, red, cfg.max_steps, cfg.red_p))
+    O = np.concatenate([t.obs for t in trajs]); a = np.concatenate([t.actions for t in trajs]); d = np.concatenate([t.disps for t in trajs])
+    i = np.concatenate([np.full(len(t.actions), e) for e, t in enumerate(trajs)])
+    res = {}
+    for mode in ("ep", "row"):
+        imp, cand = imp_of(enc(O), a, d, candidates_B(O, a), practice, mkrng(SEED, 98, 0), mode, i)
+        res[mode] = {CAND_B_NAMES[int(c)]: {"mean": float(imp[k].mean()), "allpos": bool((imp[k] > 0).all()),
+                                           "folds": [round(float(x), 6) for x in imp[k]]} for k, c in enumerate(cand)}
+    res["n_rows"] = int(len(a))
+    return res
+h3 = {"global": big(pg, False), "red": big(cfg.p_slip, True)}
+
+json.dump({"seed": SEED, "check": check, "delta0": delta0, "p_global": pg, "practice": [CAND_B_NAMES[c] for c in practice],
+           "main_opened": {c: [o["name"] for o in res_main["conditions"][c]["M3-B"]["opened"]] for c in ("global", "red")},
+           "null_row": ns_row, "null_ep": ns_ep, "d_series_row": d_series_row, "d_series_ep": d_series_ep,
+           "deploy": dep, "h3": h3, "sec": round(time.time() - t0)}, open(f"out_{SEED}.json", "w"), indent=1)
+print("fertig", SEED, round(time.time() - t0), "s")
