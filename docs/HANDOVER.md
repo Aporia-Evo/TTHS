@@ -1,10 +1,19 @@
-# Handover Farbversuch (Stand 05.10.2026: Pilot und Bestätigung erledigt, Einfrieren steht aus)
+# Handover Farbversuch (Stand 06.10.2026: Hauptlauf 400–409 abgeschlossen, Bericht steht aus)
 
 Für die nächste Claude-Sitzung. Dieses Dokument soll genügen, um ohne weitere Vorgeschichte weiterzuarbeiten. Hintergrund in `docs/PROJEKTBESCHREIBUNG.md`, alle Läufe und Änderungen in `farbversuch/PROTOKOLL.md`.
 
 Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf diesem Branch gearbeitet.
 
 ## Kurzfassung
+
+**Hauptlauf abgeschlossen (06.10.2026).** Eingefroren mit Commit `b9589ce`, Hauptlauf 400–409 ohne Unterbrechung, `freeze verify` OK.
+- **Vorregistriertes Ergebnis** (`farbversuch/results/main_report.md`, PROTOKOLL „Hauptlauf 400–409“):
+  - P1 erfüllt (10/10), P2 erfüllt (10/10), **P3 nicht erfüllt (6/10)**, P4 erfüllt, P5 erfüllt.
+  - **Abbruchkriterium ausgelöst:** M3-B öffnet bei `global` in 4/10 Seeds ein Merkmal, das Kriterium greift ab mehr als 3.
+- **Offen:** der Bericht nach Spec v2 §11. Was jetzt noch geändert oder untersucht wird, ist nachträgliche Erkundung und muss auf frischen Seeds bestätigt werden. Die Seeds 400–409 sind verbraucht.
+
+Die folgenden Punkte beschreiben den Stand vor dem Hauptlauf und bleiben als Referenz stehen.
+
 
 - **Code:** v2 ist fertig, geprüft und unverändert seit Merge `b5d573f`.
 - **Pilot und Tuning:** Der Pilot (Seed 0) und die Entwicklung der Trainingsparameter (Seeds 0, 500–504) sind abgeschlossen. Die Konfiguration steht in `farbversuch/pilot_config.json`.

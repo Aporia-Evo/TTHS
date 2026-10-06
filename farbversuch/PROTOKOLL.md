@@ -250,3 +250,47 @@ Freigegeben durch den Nutzer am 05.10.2026: einfrieren und Hauptlauf 400–409 i
 ```
 
 Der Fingerabdruck ist identisch mit dem der Bestätigung 510–514 (`51ddfec…`). Code und Umgebung sind also dieselben wie dort. Die Ergebnisdateien des Hauptlaufs tragen ihn je Seed.
+
+## Hauptlauf 400–409 (05./06.10.2026, eingefrorene Konfiguration)
+
+**Lauf:**
+- Konfiguration: `frozen_config.json`, Code-Stand `b9589ce`, `--jobs 4`.
+- Laufzeit: Start 05.10. 20:56:07, Ende 06.10. 00:31:53, ohne Unterbrechung oder Neustart.
+- Fingerabdruck auf allen 10 Seeds identisch (`51ddfec…`), gleich dem beim Einfrieren protokollierten. `freeze verify` nach dem Lauf: OK. `analyze` meldet keine Warnung.
+
+**Vorregistrierte Auswertung** (`results/main_report.md`, Urteile nur für genau 400–409):
+
+| Vorhersage | Ergebnis | Zahlen |
+|---|---|---|
+| P1 Prämissen | erfüllt | 10/10 (Invarianz 0,952–0,978) |
+| P2 M3-B schreibt `red` richtig zu | erfüllt | 10/10 (Schwelle ≥ 9) |
+| P3 M3-B öffnet bei `global` nichts | **nicht erfüllt** | 6/10 (Schwelle ≥ 9) |
+| P4 M3-A langsamer oder mehr Fehlzuschreibungen | erfüllt | Latenz M3-A 182 gegen M3-B 49 Episoden (zensiert am Horizont). Fehlzuschreibungen M3-A 10, M3-B 11. |
+| P5 M3-B mindestens so treffsicher wie S1-B | erfüllt | Treffer bei `red`: M3-B 10, S1-B 9 |
+
+**Abbruchkriterium: ausgelöst.** M3-B öffnet bei `global` in 4/10 Seeds ein Merkmal; das Kriterium greift ab mehr als 3. Die richtige Zuschreibung bei `red` (10/10) liegt dagegen weit über der Abbruchgrenze (< 5).
+
+**Beobachtungen** (reine Zahlen, ohne Deutung; jede Deutung oder Änderung ist nachträgliche Erkundung):
+
+- **M3-B unter `red`:**
+  - Zuschreibung bei Episode 110–200, also Latenz 10–100, im Mittel 49.
+  - Zusätzliche Öffnungen gab es in 6 Seeds: „Ziel“ 3×, weitere Farben 4×.
+- **M3-B unter `global`:**
+  - Die Fehlöffnungen:
+
+    | Seed | Merkmal | Episode | Gewinn | δ |
+    |---|---|---|---|---|
+    | 400 | „Farbe 2“ | 220 | 0,0017 | 0 |
+    | 403 | „Ziel“ | 390 | 0,0014 | 0,0006 |
+    | 405 | „Farbe 0“ | 220 | 0,0014 | 0 |
+    | 409 | „Farbe 0“ | 180 | 0,0015 | 0,0011 |
+
+  - Alle vier liegen nach dem ersten Erklären: Bemerkt wurde jeweils bei Episode 120–180.
+  - Zum Vergleich: Die richtigen Öffnungen von „Farbe 0“ unter `red` hatten Gewinne von 0,004 bis 0,041.
+- **M3-B unter `none` und `walls`:** Unter `none` kein Fehlalarm. Unter `walls` 1 Fehlzuschreibung.
+- **Vergleichssysteme:**
+  - M3-A schreibt `red` in 5/10 Seeds richtig zu.
+  - S1-B schreibt in 9/10 Seeds richtig zu, macht aber 17 Fehlzuschreibungen unter `global`.
+  - S1-A schreibt in 8/10 Seeds richtig zu.
+
+An Code, Konfiguration, Schwellen und Auswertung wurde nichts geändert. Die Seeds 400–409 sind verbraucht.

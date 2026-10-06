@@ -1,0 +1,200 @@
+20:56:07 seed 400 gestartet
+20:56:07 seed 401 gestartet
+20:56:07 seed 402 gestartet
+20:56:07 seed 403 gestartet
+20:57:31 seed 403 Routine trainiert (84 s)
+20:57:33 seed 403 Vorwärtsmodell fertig (1 s)
+20:57:35 seed 402 Routine trainiert (89 s)
+20:57:35 seed 403 Prämisse ok (Invarianz 0.957, Restanteil 0.051, Verschiebung 0.072)
+20:57:36 seed 401 Routine trainiert (89 s)
+20:57:36 seed 400 Routine trainiert (90 s)
+20:57:37 seed 402 Vorwärtsmodell fertig (1 s)
+20:57:37 seed 403 Vor-Öffnen M3-B: Wand
+20:57:37 seed 401 Vorwärtsmodell fertig (1 s)
+20:57:38 seed 400 Vorwärtsmodell fertig (1 s)
+20:57:39 seed 402 Prämisse ok (Invarianz 0.974, Restanteil 0.052, Verschiebung 0.068)
+20:57:40 seed 401 Prämisse ok (Invarianz 0.952, Restanteil 0.016, Verschiebung 0.063)
+20:57:40 seed 400 Prämisse ok (Invarianz 0.964, Restanteil -0.049, Verschiebung 0.090)
+20:57:40 seed 402 Vor-Öffnen M3-B: Wand
+20:57:41 seed 401 Vor-Öffnen M3-B: Wand
+20:57:42 seed 400 Vor-Öffnen M3-B: Wand
+21:02:54 seed 400 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit17&a0
+21:02:54 seed 400 Vor-Öffnen S1-B: Farbe 0, Ziel
+21:02:57 seed 400 Vor-Öffnen S1-A: bit78&a2, bit153&a2, bit253&a2, bit121&a2, bit277&a2, bit131&a2, bit22&a2, bit268&a2
+21:02:58 seed 402 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit17&a0
+21:02:58 seed 402 Vor-Öffnen S1-B: Farbe 2
+21:03:01 seed 401 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit31&a1
+21:03:01 seed 401 Vor-Öffnen S1-B: keine
+21:03:01 seed 402 Vor-Öffnen S1-A: bit59&a2, bit145&a2, bit166&a2, bit182&a2, bit100&a2, bit219&a2, bit211&a2, bit102&a2
+21:03:04 seed 401 Vor-Öffnen S1-A: bit67&a2, bit297&a2, bit231&a2, bit183&a2, bit171&a2, bit31&a1, bit121&a2, bit173&a2
+21:03:06 seed 400 Null-Ströme und Schwellen fertig (9 s)
+21:03:09 seed 402 Null-Ströme und Schwellen fertig (8 s)
+21:03:12 seed 401 Null-Ströme und Schwellen fertig (8 s)
+21:03:14 seed 400 δ M3-B = 0
+21:03:17 seed 402 δ M3-B = 0.001194
+21:03:21 seed 401 δ M3-B = 0
+21:04:40 seed 403 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit31&a1, bit17&a0
+21:04:40 seed 403 Vor-Öffnen S1-B: keine
+21:04:43 seed 403 Vor-Öffnen S1-A: bit92&a1, bit89&a1, bit31&a1, bit196&a1, bit287&a1, bit128&a1, bit279&a1, bit250&a1
+21:04:52 seed 403 Null-Ströme und Schwellen fertig (9 s)
+21:05:01 seed 403 δ M3-B = 0.000636
+21:24:11 seed 400 δ M3-A = 0.02147
+21:24:11 seed 400 Phase 1 fertig (1681 s)
+21:24:14 seed 404 gestartet
+21:24:24 seed 403 δ M3-A = 0.004265
+21:24:24 seed 403 Phase 1 fertig (1695 s)
+21:24:27 seed 405 gestartet
+21:24:37 seed 402 δ M3-A = 0.02655
+21:24:37 seed 402 Phase 1 fertig (1708 s)
+21:24:40 seed 406 gestartet
+21:25:07 seed 401 δ M3-A = 0.04227
+21:25:07 seed 401 Phase 1 fertig (1738 s)
+21:25:10 seed 407 gestartet
+21:25:40 seed 404 Routine trainiert (86 s)
+21:25:41 seed 404 Vorwärtsmodell fertig (1 s)
+21:25:44 seed 404 Prämisse ok (Invarianz 0.972, Restanteil -0.018, Verschiebung 0.072)
+21:25:45 seed 404 Vor-Öffnen M3-B: Wand
+21:25:51 seed 405 Routine trainiert (85 s)
+21:25:53 seed 405 Vorwärtsmodell fertig (1 s)
+21:25:55 seed 405 Prämisse ok (Invarianz 0.960, Restanteil 0.024, Verschiebung 0.071)
+21:25:57 seed 405 Vor-Öffnen M3-B: Wand
+21:26:06 seed 406 Routine trainiert (86 s)
+21:26:07 seed 406 Vorwärtsmodell fertig (1 s)
+21:26:10 seed 406 Prämisse ok (Invarianz 0.978, Restanteil 0.014, Verschiebung 0.074)
+21:26:11 seed 406 Vor-Öffnen M3-B: Wand
+21:26:33 seed 407 Routine trainiert (83 s)
+21:26:34 seed 407 Vorwärtsmodell fertig (1 s)
+21:26:37 seed 407 Prämisse ok (Invarianz 0.963, Restanteil 0.007, Verschiebung 0.083)
+21:26:38 seed 407 Vor-Öffnen M3-B: Wand
+21:29:50 seed 404 Vor-Öffnen M3-A: bit23&a2, bit25&a3
+21:29:50 seed 404 Vor-Öffnen S1-B: Ziel, Farbe 3
+21:29:53 seed 404 Vor-Öffnen S1-A: bit26&a3
+21:30:02 seed 404 Null-Ströme und Schwellen fertig (8 s)
+21:30:10 seed 404 δ M3-B = 0
+21:30:59 seed 405 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit17&a0
+21:30:59 seed 405 Vor-Öffnen S1-B: Farbe 2
+21:31:02 seed 405 Vor-Öffnen S1-A: bit82&a2, bit297&a2, bit286&a2, bit88&a2, bit195&a2, bit295&a2, bit236&a2, bit144&a2
+21:31:10 seed 405 Null-Ströme und Schwellen fertig (8 s)
+21:31:18 seed 405 δ M3-B = 0
+21:32:37 seed 406 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit17&a0, bit31&a1
+21:32:37 seed 406 Vor-Öffnen S1-B: keine
+21:32:40 seed 406 Vor-Öffnen S1-A: bit17&a0, bit236&a0, bit209&a0, bit268&a0, bit228&a0
+21:32:49 seed 406 Null-Ströme und Schwellen fertig (8 s)
+21:32:56 seed 406 δ M3-B = 0.001768
+21:32:57 seed 407 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit17&a0, bit31&a1
+21:32:57 seed 407 Vor-Öffnen S1-B: keine
+21:33:00 seed 407 Vor-Öffnen S1-A: bit188&a2
+21:33:07 seed 407 Null-Ströme und Schwellen fertig (8 s)
+21:33:15 seed 407 δ M3-B = 0.001726
+21:51:11 seed 406 δ M3-A = 0.002976
+21:51:11 seed 406 Phase 1 fertig (1589 s)
+21:51:14 seed 408 gestartet
+21:51:18 seed 405 δ M3-A = 0.03081
+21:51:18 seed 405 Phase 1 fertig (1608 s)
+21:51:20 seed 409 gestartet
+21:51:49 seed 407 δ M3-A = 0.004378
+21:51:49 seed 407 Phase 1 fertig (1597 s)
+21:52:36 seed 404 δ M3-A = 0.04171
+21:52:36 seed 404 Phase 1 fertig (1699 s)
+21:52:36 seed 408 Routine trainiert (82 s)
+21:52:37 seed 408 Vorwärtsmodell fertig (1 s)
+21:52:40 seed 408 Prämisse ok (Invarianz 0.966, Restanteil 0.047, Verschiebung 0.071)
+21:52:41 seed 408 Vor-Öffnen M3-B: Wand
+21:52:41 seed 409 Routine trainiert (81 s)
+21:52:42 seed 409 Vorwärtsmodell fertig (1 s)
+21:52:45 seed 409 Prämisse ok (Invarianz 0.970, Restanteil 0.021, Verschiebung 0.077)
+21:52:46 seed 409 Vor-Öffnen M3-B: Wand
+21:57:44 seed 408 Vor-Öffnen M3-A: bit25&a3, bit23&a2, bit31&a1
+21:57:45 seed 408 Vor-Öffnen S1-B: Farbe 2
+21:57:48 seed 408 Vor-Öffnen S1-A: bit31&a1, bit205&a1, bit264&a1, bit234&a1, bit242&a1, bit281&a1, bit109&a1, bit142&a1
+21:57:55 seed 408 Null-Ströme und Schwellen fertig (8 s)
+21:58:03 seed 408 δ M3-B = 0
+21:59:00 seed 409 Vor-Öffnen M3-A: bit23&a2, bit25&a3, bit17&a0, bit31&a1
+21:59:00 seed 409 Vor-Öffnen S1-B: keine
+21:59:03 seed 409 Vor-Öffnen S1-A: bit254&a2
+21:59:11 seed 409 Null-Ströme und Schwellen fertig (8 s)
+21:59:19 seed 409 δ M3-B = 0.001081
+22:17:55 seed 408 δ M3-A = 0.02595
+22:17:55 seed 408 Phase 1 fertig (1599 s)
+22:18:09 seed 409 δ M3-A = 0.003188
+22:18:09 seed 409 Phase 1 fertig (1606 s)
+22:18:12 seed 400 Bedingung none gestartet
+22:18:12 seed 400 Bedingung red gestartet
+22:18:12 seed 400 Bedingung global gestartet
+22:18:12 seed 400 Bedingung walls gestartet
+22:18:12 seed 400 Bedingung none fertig (1 s)
+22:18:12 seed 401 Bedingung none gestartet
+22:18:13 seed 400 Bedingung walls fertig (1 s)
+22:18:13 seed 401 Bedingung red gestartet
+22:18:13 seed 401 Bedingung none fertig (1 s)
+22:18:13 seed 401 Bedingung global gestartet
+22:43:49 seed 400 Bedingung red fertig (1537 s)
+22:43:49 seed 401 Bedingung walls gestartet
+22:43:50 seed 401 Bedingung walls fertig (1 s)
+22:43:50 seed 402 Bedingung none gestartet
+22:43:50 seed 402 Bedingung none fertig (1 s)
+22:43:50 seed 402 Bedingung red gestartet
+22:50:09 seed 401 Bedingung red fertig (1916 s)
+22:50:09 seed 402 Bedingung global gestartet
+22:52:11 seed 400 Bedingung global fertig (2039 s)
+22:52:11 seed 402 Bedingung walls gestartet
+22:52:12 seed 402 Bedingung walls fertig (1 s)
+22:52:12 seed 403 Bedingung none gestartet
+22:52:13 seed 403 Bedingung none fertig (1 s)
+22:52:13 seed 403 Bedingung red gestartet
+22:53:31 seed 401 Bedingung global fertig (2118 s)
+22:53:31 seed 403 Bedingung global gestartet
+22:57:33 seed 403 Bedingung red fertig (320 s)
+22:57:33 seed 403 Bedingung walls gestartet
+22:57:34 seed 403 Bedingung walls fertig (1 s)
+22:57:34 seed 404 Bedingung none gestartet
+22:57:34 seed 404 Bedingung none fertig (1 s)
+22:57:34 seed 404 Bedingung red gestartet
+23:18:41 seed 402 Bedingung red fertig (2091 s)
+23:18:41 seed 404 Bedingung global gestartet
+23:20:46 seed 403 Bedingung global fertig (1635 s)
+23:20:46 seed 404 Bedingung walls gestartet
+23:20:47 seed 404 Bedingung walls fertig (1 s)
+23:20:47 seed 405 Bedingung none gestartet
+23:20:47 seed 405 Bedingung none fertig (1 s)
+23:20:47 seed 405 Bedingung red gestartet
+23:25:08 seed 402 Bedingung global fertig (2100 s)
+23:25:08 seed 405 Bedingung global gestartet
+23:28:23 seed 404 Bedingung red fertig (1848 s)
+23:28:23 seed 405 Bedingung walls gestartet
+23:28:23 seed 405 Bedingung walls fertig (1 s)
+23:28:23 seed 406 Bedingung none gestartet
+23:28:24 seed 406 Bedingung none fertig (1 s)
+23:28:24 seed 406 Bedingung red gestartet
+23:33:34 seed 406 Bedingung red fertig (310 s)
+23:33:34 seed 406 Bedingung global gestartet
+23:39:39 seed 406 Bedingung global fertig (365 s)
+23:39:39 seed 406 Bedingung walls gestartet
+23:39:40 seed 406 Bedingung walls fertig (1 s)
+23:39:40 seed 407 Bedingung none gestartet
+23:39:41 seed 407 Bedingung none fertig (1 s)
+23:39:41 seed 407 Bedingung red gestartet
+23:42:54 seed 407 Bedingung red fertig (193 s)
+23:42:54 seed 407 Bedingung global gestartet
+23:44:48 seed 404 Bedingung global fertig (1567 s)
+23:44:48 seed 407 Bedingung walls gestartet
+23:47:28 seed 405 Bedingung red fertig (1600 s)
+23:47:28 seed 408 Bedingung none gestartet
+23:47:29 seed 408 Bedingung none fertig (1 s)
+23:47:29 seed 408 Bedingung red gestartet
+23:55:54 seed 407 Bedingung walls fertig (666 s)
+23:55:54 seed 408 Bedingung global gestartet
+00:02:17 seed 405 Bedingung global fertig (2229 s)
+00:02:17 seed 408 Bedingung walls gestartet
+00:17:57 seed 408 Bedingung red fertig (1829 s)
+00:17:57 seed 409 Bedingung none gestartet
+00:17:58 seed 409 Bedingung none fertig (1 s)
+00:17:58 seed 409 Bedingung red gestartet
+00:18:07 seed 408 Bedingung walls fertig (950 s)
+00:18:07 seed 409 Bedingung global gestartet
+00:18:51 seed 407 Bedingung global fertig (2158 s)
+00:18:51 seed 409 Bedingung walls gestartet
+00:18:52 seed 409 Bedingung walls fertig (1 s)
+00:21:17 seed 409 Bedingung red fertig (199 s)
+00:29:40 seed 408 Bedingung global fertig (2026 s)
+00:31:43 seed 409 Bedingung global fertig (815 s)
