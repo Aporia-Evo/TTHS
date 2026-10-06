@@ -1,4 +1,4 @@
-# Farbversuch – Projektbeschreibung (Stand 05.10.2026: v2, bestätigt, vor dem Einfrieren)
+# Farbversuch – Projektbeschreibung (Stand 06.10.2026: v2, Hauptlauf abgeschlossen)
 
 Bindend sind die Spezifikation v2 (`docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-v2-design.md`) und der Plan v2 (`docs/superpowers/plans/2026-10-03-farb-wiederoeffnung-v2.md`). Die Dokumente der Version 1 (`…-farb-wiederoeffnung-design.md`, `…-farb-wiederoeffnung.md`) sind Geschichte. Anhang A der Spec v2 nennt, was sich gegenüber v1 geändert hat und warum. Der Plan v2 verweist für alles, was er nicht neu regelt, auf die Festlegungen des v1-Plans. Anhang B der Spec v2 ist ein datierter Review-Nachtrag vom 05.10.2026. Er präzisiert Kalibrierung, Grenzen und Auswertung und ändert keine Regel.
 
@@ -91,7 +91,7 @@ Pilot, Bestätigung und Hauptlauf laufen jeweils komplett auf derselben Maschine
 
 ## Stand der Läufe (05.10.2026)
 
-Alle Zahlen sind explorativ. Die Vorhersagen P2–P5 sind noch nicht geprüft; das geschieht erst im Hauptlauf. Einzelheiten und alle Änderungen mit Begründung stehen in `farbversuch/PROTOKOLL.md`.
+Zahlen aus Pilot und Bestätigungsläufen sind explorativ. Die vorab festgelegten Vorhersagen wurden ausschließlich im Hauptlauf geprüft (letzter Punkt). Einzelheiten und alle Änderungen mit Begründung stehen in `farbversuch/PROTOKOLL.md`.
 
 - **Pilot Seed 0:** Mit den Standardwerten scheitert P1 (Farbinvarianz 0,926). Mit `wd` 0,01 ist die Prämisse erfüllt.
 - **Bestätigung 500–504 (wd 0,01):** nicht bestätigt, die Prämisse hält nur in 2/5 Seeds.
@@ -108,7 +108,12 @@ Alle Zahlen sind explorativ. Die Vorhersagen P2–P5 sind noch nicht geprüft; d
   - **Fehlzuschreibungen insgesamt nach §6:** M3-B 5, M3-A 2.
   - **M3-A unter `red`:** 3/5 Treffer, je bei Latenz 40. Der Mittelwert 144 zählt 2 Nichttreffer mit 300.
   - **S1-B unter `red`:** 5/5 Treffer.
-- **Entscheidung des Nutzers vom 05.10.2026:** die bestehende Methode einfrieren (Entscheidung A), ohne weitere Bestätigungsrunde und ohne Änderung an Algorithmen, Hyperparametern, Schwellen oder Vorhersagen. Das Einfrieren selbst steht noch aus.
+- **Entscheidung des Nutzers vom 05.10.2026:** die bestehende Methode einfrieren (Entscheidung A), ohne weitere Bestätigungsrunde und ohne Änderung an Algorithmen, Hyperparametern, Schwellen oder Vorhersagen. Eingefroren mit Commit `b9589ce`.
+- **Hauptlauf 400–409 (05./06.10.2026), vorregistrierte Auswertung:**
+  - erfüllt: P1 (10/10), P2 (10/10), P4 und P5;
+  - **nicht erfüllt: P3** (6/10);
+  - **Abbruchkriterium ausgelöst**: M3-B öffnet bei `global` in 4/10 Seeds ein Merkmal.
+  - Bericht: `farbversuch/BERICHT.md`.
 
 ## Aussagegrenzen
 
