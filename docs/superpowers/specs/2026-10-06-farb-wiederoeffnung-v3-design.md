@@ -156,6 +156,18 @@ Eine Änderung zur Zeit: v3 ändert die Kalibrierung des Erklärens und sonst ni
 
 **Begründung:** Bei 21 austauschbaren Werten ist die Wahrscheinlichkeit, dass ein bestimmter strikt größer als alle anderen ist, höchstens 1/21. Bindungen ändern daran nichts, auch δ₁ = 0 nicht.
 
+**Prüfschema.** Aussage, Voraussetzungen, Begründung und Umsetzung werden getrennt festgehalten und getrennt geprüft:
+
+| Teil | Inhalt | Wie geprüft |
+|---|---|---|
+| Aussage | P(T_neu > max(T₁, …, T₂₀)) ≤ 1/21; T ist das Maximum der vollständigen Erklärserie nach §3 | – |
+| V1 Austauschbarkeit | Einsatzstrom und Kalibrierströme sind austauschbar | Nur durch den Versuchsaufbau: Sie gilt für `none` und vor dem Wechsel, sonst nicht (unten). |
+| V2 Gleiche Statistik | T ist in Kalibrierung und Einsatz dieselbe Funktion des Stroms: Puffer, Zeitpunkte, Basis, Kandidaten, Teilungsschlüssel | Tests T1, T2, T7 (§10) |
+| V3 Öffnung setzt Überschreitung voraus | Jede erste Öffnung im Einsatz setzt T_Einsatz > δ₁ voraus | Tests T3, T4 |
+| Begründung | Rangargument wie oben | Elementar. T6 prüft es zusätzlich an synthetischen Strömen. |
+
+Ein formaler Beweis, etwa in Lean mit unabhängiger Prüfung wie bei [Comparator](https://github.com/leanprover/comparator), würde nur die Begründung absichern, also den einfachsten Teil. Er sagt nichts darüber, ob V1 unter `global` oder für Zusatzöffnungen gilt, und nichts über V2 im Python-Code. Er ist deshalb nicht vorgesehen.
+
 **Was die Aussage bedeutet:**
 - Sie betrifft das Überschreiten einer vorab festgelegten Serienstatistik.
 - Sie ist **gemittelt** über die Zufälligkeit von Kalibrier- und Einsatzströmen. Bedingt auf die 20 Kalibrierströme eines Seeds kann die Rate höher sein.
@@ -303,7 +315,10 @@ Hauptlauf: Seeds 600–609. Die Schwellen sind wie in v2, damit beide vergleichb
 **Bewertung bei Z3 (erste Öffnung je Strom):**
 - **Treffer unter `red`:** Die erste Öffnung des Stroms ist das richtige Merkmal (wie v2 §6) und liegt bei E > 100.
   - Eine erste Öffnung vor dem Wechsel ist kein Treffer.
-  - Bei S1 zählt die erste Öffnungsrunde. Treffer, wenn das richtige Merkmal darunter ist.
+  - **M3 und S1 werden mit derselben Definition bewertet** (E8). S1 kann in v2 bis zu 3 Merkmale in einer Runde öffnen. „Treffer, wenn das richtige Merkmal unter den Öffnungen der ersten Runde ist“ wäre für S1 nachsichtiger als für M3 und würde P5 verzerren. Varianten:
+    - **S1 öffnet höchstens ein Merkmal je Runde (Empfehlung):** das erste in Holm-Reihenfolge, also kleinster p-Wert, dann größte Differenz, dann kleinster Index. „Erste Öffnung“ ist dann für beide Verfahren ein einzelnes Merkmal. §4 bleibt gültig, weil eine erste Öffnung weiter jede Ablehnung voraussetzt.
+    - **S1 wie v2:** Treffer nur, wenn das richtige Merkmal in der ersten Runde in Holm-Reihenfolge vorn liegt. Die übrigen Merkmale dieser Runde zählen als falsche erste Öffnungen.
+  - Treffer, erste Öffnung und Latenz bestimmt für alle Systeme **eine einzige Auswertungsfunktion** (Test T8).
 - **Falsche erste Öffnung:**
   - in `none`, `global` und `walls` jede erste Öffnung eines Farbmerkmals;
   - in `red` jede erste Öffnung, die kein Treffer ist.
@@ -402,7 +417,10 @@ Alle v2-Tests bleiben. Neu:
   - Die Entscheidung „p̃ < α₁“ ist gleich `holm_select` auf Stufe α₁ mit strikter Ungleichung.
 - **T6 Kalibrierung austauschbarer Ströme** (synthetisch, `slow`): Mit 21 austauschbaren synthetischen Strömen liegt die Überschreitungsrate über viele Wiederholungen bei ≤ 1/21 (Binomialtoleranz).
 - **T7 Pflichtprüfung:** `n_null_episodes != n_deploy_episodes` ergibt einen Fehler.
-- **T8 Bewertung Z3:** Treffer, falsche erste Öffnung, Latenz und Abbruch werden aus der ersten Öffnung bestimmt. Zusatzöffnungen ändern kein Urteil, werden aber berichtet.
+- **T8 Bewertung Z3:**
+  - Treffer, falsche erste Öffnung, Latenz und Abbruch werden aus der ersten Öffnung bestimmt.
+  - Zusatzöffnungen ändern kein Urteil, werden aber berichtet.
+  - M3 und S1 laufen durch dieselbe Auswertungsfunktion. Ein S1-Ergebnis mit mehreren Öffnungen in der ersten Runde wird nach E8 bewertet, nicht nachsichtiger als M3.
 - **T9 Seeds:**
   - Urteile gibt es nur für 600–609.
   - Die Bestätigung nimmt nur nicht verbrauchte Seeds ab 520.
@@ -445,6 +463,7 @@ Dazu kommen Umsetzung mit Tests, Entwicklungsprüfungen (D1 ≈ 1–1,5 h auf 4 
 - **E5:** S1-A unkalibriert nur beschreiben oder weglassen?
 - **E6:** Entwicklungsprüfungen D1–D3 auf verbrauchten Seeds freigeben? Dafür werden Routinen verbrauchter Seeds deterministisch neu berechnet; ein neues Training mit neuen Einstellungen ist das nicht.
 - **E7:** Seeds bestätigen: 520–524 für die Bestätigung, 600–609 für den Hauptlauf.
+- **E8:** S1 höchstens ein Merkmal je Runde (Empfehlung) oder S1 wie v2 mit strenger Trefferdefinition (§8)?
 
 ---
 
@@ -455,3 +474,8 @@ Dazu kommen Umsetzung mit Tests, Entwicklungsprüfungen (D1 ≈ 1–1,5 h auf 4 
 - Umlernen von Routine oder Encoder;
 - andere Welten;
 - Kalibrierung unter höherem Rauschen, also eigene `global`-ähnliche Null-Ströme. Das wäre eine eigene Variante mit eigener Nullhypothese.
+- **Jederzeit gültige Tests über Martingale (Doob- bzw. Ville-Maximalungleichung, e-Prozesse).**
+  - Vorteil: Sie könnten eine Überschreitung irgendwann in der Serie auch unter `global` begrenzen. Dann hinge die Grenze nicht an der Austauschbarkeit mit den Null-Strömen.
+  - Voraussetzung: ein Prozess, der unter jeder Verteilung der Nullhypothese ein Supermartingal ist. Die überlappenden Kreuzvalidierungs-Gewinne von M3 sind das nicht.
+  - Ein fortlaufender Likelihood-Quotient gegen das Vorwärtsmodell wäre es nur, wenn das Vorwärtsmodell die wahre bedingte Verteilung träfe. Das tut es hier nicht.
+  - Das wäre eine eigene Version mit eigener Nullhypothese. Die Ungleichung selbst ist Standard (Mathlib `MeasureTheory.maximal_ineq`). Die Fundstelle in `openai/math` (`martingale_exponential_maximal`) ist eine Anwendung davon.

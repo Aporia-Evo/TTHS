@@ -15,7 +15,7 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf d
 - **Nachträgliche Diagnose und v3-Entwurf (06.10.2026):**
   - Diagnose der M3-B-Fehlöffnungen auf 400–409: `farbversuch/results/nachtrag_diagnose/`, PROTOKOLL letzter Abschnitt, BERICHT §5.
   - v3-Entwurf, nicht freigegeben: `docs/superpowers/specs/2026-10-06-farb-wiederoeffnung-v3-design.md`.
-  - Die offenen Entscheidungen E1–E7 stehen in dessen §12.
+  - Die offenen Entscheidungen E1–E8 stehen in dessen §12.
   - Bis zur Freigabe gilt: keine Umsetzung, keine Läufe auf frischen Seeds (vorgesehen 520–524 und 600–609), kein Einfrieren.
 
 Die folgenden Punkte beschreiben den Stand vor dem Hauptlauf und bleiben als Referenz stehen.
