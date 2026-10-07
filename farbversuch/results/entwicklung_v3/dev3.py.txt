@@ -1,0 +1,285 @@
+"""ENTWICKLUNGSPRÜFUNGEN v3 (Spec v3 §9.0) auf verbrauchten Seeds. Keine Evidenz. Ändert nichts am Repo.
+
+    python dev3.py d1 SEED   D1 (M3-B) + D2 (S1-B): Serienkalibrierung und Nachspielung aller vier Bedingungen
+    python dev3.py d3 SEED   D3: Kosten von M3-A an einem Null-Strom (Strom 0)
+
+Umgebung SMOKE=1: Kurzlauf zum Testen (2 Null-Ströme, nur `global`, D3 mit 2 Runden).
+"""
+import os
+import sys
+
+for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS"):
+    os.environ[v] = "1"
+REPO = "/home/user/TTHS"
+sys.path.insert(0, REPO)
+
+import json
+import time
+from collections import deque
+from dataclasses import replace
+
+import numpy as np
+
+from farbversuch import monitor, run
+from farbversuch.config import Config
+from farbversuch.monitor import (CAND_B_NAMES, RingBuffer, candidate_name, candidates_A, candidates_B,
+                                 m3_improvements, perm_pvalues, s1_explain, select_m3)
+from farbversuch.seeds import CV, NULL, PERM, rng as mkrng
+
+run._log = lambda m: None
+MODE, SEED = sys.argv[1], int(sys.argv[2])
+SMOKE = os.environ.get("SMOKE") == "1"
+N_PERM_V3 = 10_000
+FROZEN = Config.from_json(f"{REPO}/farbversuch/frozen_config.json")
+REF_PATH = (f"{REPO}/farbversuch/results/main/seed_{SEED}.json" if 400 <= SEED <= 409
+            else f"{REPO}/farbversuch/results/confirm_510/seed_{SEED}.json")
+REF = json.load(open(REF_PATH))
+assert REF["config"] == FROZEN.as_dict(), "Referenz mit anderer Konfiguration"
+t_start = time.time()
+LOG = open(f"log_{MODE}_{SEED}.txt", "a")
+
+
+def log(msg):
+    LOG.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+    LOG.flush()
+
+
+def best_eligible(imp):
+    """(Index, Mittel) des besten Kandidaten mit allen Teilungen > 0, sonst (None, 0.0); wie m3_null_gain."""
+    el = (imp > 0).all(axis=1)
+    if not el.any():
+        return None, 0.0
+    means = np.where(el, imp.mean(axis=1), -np.inf)
+    k = int(np.argmax(means))
+    return k, float(means[k])
+
+
+def imp_split(Z, A, D, F, known, E, mode, ids, fit_kw):
+    """m3_improvements mit dem Teilungsschlüssel des Einsatzes; mode 'ep' teilt nach Episoden (nur hier)."""
+    if mode == "ep":
+        def ep_folds(n, r, n_folds=5):
+            assert len(ids) == n
+            groups = np.array_split(r.permutation(np.unique(ids)), n_folds)
+            return [np.flatnonzero(np.isin(ids, g)) for g in groups]
+        monitor.cv_folds, orig = ep_folds, monitor.cv_folds
+        try:
+            return m3_improvements(Z, A, D, F, known, mkrng(SEED, CV, E), **fit_kw)
+        finally:
+            monitor.cv_folds = orig
+    return m3_improvements(Z, A, D, F, known, mkrng(SEED, CV, E), **fit_kw)
+
+
+def checkpoints(trajs, p1, cfg):
+    """Wie der Monitor: Schritt für Schritt in den Ringpuffer, Überraschung je Schritt, CUSUM je Schritt.
+    Liefert je Prüfpunkt (E, obs, A, D, S, Episoden-IDs, S1-Bemerkzeitpunkt oder None)."""
+    enc, fwd = p1.routine.encode, p1.forward
+    buf, ids = RingBuffer(cfg.buffer_size), deque(maxlen=cfg.buffer_size)
+    cusum, s1_noticed = 0.0, None
+    for e, t in enumerate(trajs):
+        for o, a, d in zip(t.obs, t.actions, t.disps):
+            a, d = int(a), int(d)
+            s = float(fwd.surprise(enc(o[None]), np.array([a]), np.array([d]))[0])
+            buf.add(o, a, d, s)
+            ids.append(e)
+            if s1_noticed is None:
+                cusum = max(0., cusum + s - p1.cusum_k)
+                if cusum > p1.cusum_h:
+                    s1_noticed = e + 1
+        E = e + 1
+        if E % cfg.check_interval == 0:
+            obs, A, D, S = buf.data()
+            yield E, obs, A, D, S, np.array(ids), s1_noticed
+
+
+def s1_round_v3(S, F, known, E, alpha1):
+    """v3-S1: Holm-adjustierter kleinster p-Wert, höchstens eine Öffnung (erste in Holm-Reihenfolge), strikt < alpha1.
+    Liefert (Kandidat oder None, adjustierter p-Wert des Ersten, Name des Ersten)."""
+    cand = np.setdiff1d(np.arange(F.shape[1]), np.asarray(known, dtype=np.intp))
+    if len(cand) == 0:
+        return None, 1.0, None
+    diff, p = perm_pvalues(S, F[:, cand], mkrng(SEED, PERM, E), n_perm=N_PERM_V3, chunk=FROZEN.perm_chunk)
+    m = len(cand)
+    order = np.lexsort((np.arange(m), -diff, p))
+    first = int(order[0])
+    padj = min(1.0, m * float(p[first]))
+    c = int(cand[first])
+    return (c if padj < alpha1 else None), padj, CAND_B_NAMES[c]
+
+
+def s1_z(S, F, known):
+    """Stetige S1-Variante: standardisierter Unterschied z = diff / sd_perm(diff) je Kandidat außerhalb von known,
+    sd_perm^2 = n^2 sigma^2 / (k1 k0 (n-1)) exakt unter Permutation. Liefert (bester Kandidat, z_max, Name)."""
+    cand = np.setdiff1d(np.arange(F.shape[1]), np.asarray(known, dtype=np.intp))
+    S = np.asarray(S, dtype=np.float64)
+    n = len(S)
+    best = (None, -np.inf, None)
+    for c in cand:
+        k1 = int(F[:, c].sum())
+        k0 = n - k1
+        if k1 == 0 or k0 == 0:
+            continue
+        m1 = float(S[F[:, c] == 1].mean())
+        m0 = float(S[F[:, c] == 0].mean())
+        sd = float(np.sqrt(n * n * S.var() / (k1 * k0 * (n - 1))))
+        z = (m1 - m0) / sd if sd > 0 else 0.0
+        if z > best[1]:
+            best = (int(c), z, CAND_B_NAMES[int(c)])
+    return best
+
+
+def d1():
+    cfg = replace(FROZEN, systems=("M3-B", "S1-B"))
+    fit_kw = run._fit_kw(cfg)
+    p1 = run.calibrate_phase1(SEED, cfg, run.train_phase1(SEED, cfg))
+    pg = run.find_p_global(SEED, cfg, p1)["p_global"]
+    prac_m3, prac_s1 = list(p1.practice["M3-B"]), list(p1.practice["S1-B"])
+    delta0 = p1.deltas["M3-B"]
+    check = {"practice_M3B": prac_m3 == [e["cand"] for e in REF["practice"]["M3-B"]],
+             "practice_S1B": prac_s1 == [e["cand"] for e in REF["practice"]["S1-B"]],
+             "delta_M3B": abs(delta0 - REF["delta"]["M3-B"]) < 1e-12,
+             "p_global": abs(pg - REF["p_global"]["p_global"]) < 1e-12,
+             "m3_threshold": abs(p1.m3_threshold - REF["calibration"]["m3_threshold"]) < 1e-12
+             if "m3_threshold" in REF.get("calibration", {}) else None}
+    log(f"Phase 1 fertig, Prüfungen {check}")
+    enc = p1.routine.encode
+
+    # ---- Serien auf den Null-Strömen (erzwungen, unabhängig von Alarm und Wechsel) ----
+    n_streams = 2 if SMOKE else cfg.n_null_streams
+    series = []
+    for j in range(n_streams):
+        trajs = [t for _, t in run.routine_rollouts(p1.routine, SEED, NULL, cfg.n_null_episodes, cfg,
+                                                     p_slip=cfg.p_slip, stream=j)]
+        rows = []
+        for E, obs, A, D, S, ids, _ in checkpoints(trajs, p1, cfg):
+            F = candidates_B(obs, A)
+            rec = {"E": E, "n": int(len(A))}
+            if len(A) >= cfg.notice_window:                      # zulässig für M3 (§3.3)
+                Z = enc(obs)
+                for mode in ("row", "ep"):
+                    imp, cand = imp_split(Z, A, D, F, prac_m3, E, mode, ids, fit_kw)
+                    k, g = best_eligible(imp)
+                    rec[f"G_{mode}"] = g
+                    rec[f"best_{mode}"] = None if k is None else CAND_B_NAMES[int(cand[k])]
+            _, padj, name = s1_round_v3(S, F, prac_s1, E, alpha1=-1.0)   # alle Prüfpunkte zulässig für S1 (§7.1)
+            rec["Q"], rec["Q_best"] = padj, name
+            _, z, zname = s1_z(S, F, prac_s1)
+            rec["Z"], rec["Z_best"] = z, zname
+            rows.append(rec)
+        T = {"row": max(r.get("G_row", 0.0) for r in rows), "ep": max(r.get("G_ep", 0.0) for r in rows),
+             "Q": min(r["Q"] for r in rows), "Z": max(r["Z"] for r in rows)}
+        series.append({"T": T, "rounds": rows})
+        log(f"Null-Strom {j}: T_row {T['row']:.5f} T_ep {T['ep']:.5f} Q {T['Q']:.5f} Z {T['Z']:.2f}")
+    d1_row = max(s["T"]["row"] for s in series)
+    d1_ep = max(s["T"]["ep"] for s in series)
+    alpha1 = min(s["T"]["Q"] for s in series)
+    z1 = max(s["T"]["Z"] for s in series)
+    log(f"δ1_row {d1_row:.5f} δ1_ep {d1_ep:.5f} α1 {alpha1:.5f} z1 {z1:.2f}")
+
+    # ---- Nachspielung der vier Bedingungen ----
+    conds = ("global",) if SMOKE else ("none", "red", "global", "walls")
+    deploy = {}
+    for cond in conds:
+        trajs = list(run.stream_episodes(SEED, cfg, p1, pg, cond))
+        m3_rules = {"M3_v2": ("row", delta0), "M3_v3_row": ("row", d1_row), "M3_v3_ep": ("ep", d1_ep)}
+        st = {k: {"opened": [], "rounds": []} for k in (*m3_rules, "S1_v2", "S1_v3", "S1_v3z")}
+        m3_noticed = None
+        s1_noticed_seen = None
+        for E, obs, A, D, S, ids, s1_noticed in checkpoints(trajs, p1, cfg):
+            s1_noticed_seen = s1_noticed
+            if m3_noticed is None and len(A) >= cfg.notice_window and float(np.mean(S[-cfg.notice_window:])) > p1.m3_threshold:
+                m3_noticed = E
+            F = candidates_B(obs, A)
+            if m3_noticed is not None:
+                Z, cache = enc(obs), {}
+                for rule, (mode, dlt) in m3_rules.items():
+                    s = st[rule]
+                    if len(s["opened"]) >= cfg.max_open:
+                        continue
+                    known = prac_m3 + [o["cand"] for o in s["opened"]]
+                    key = (mode, tuple(known))
+                    if key not in cache:
+                        cache[key] = imp_split(Z, A, D, F, known, E, mode, ids, fit_kw)
+                    imp, cand = cache[key]
+                    k, g = best_eligible(imp)
+                    s["rounds"].append({"E": E, "best": None if k is None else CAND_B_NAMES[int(cand[k])], "gain": g})
+                    c = select_m3(imp, cand, dlt)
+                    if c is not None:
+                        gain = float(imp[np.flatnonzero(cand == c)[0]].mean())
+                        s["opened"].append({"cand": int(c), "name": CAND_B_NAMES[int(c)], "episode": E, "gain": gain})
+            if s1_noticed is not None:
+                s = st["S1_v2"]
+                if len(s["opened"]) < cfg.max_open:
+                    known = prac_s1 + [o["cand"] for o in s["opened"]]
+                    for c in s1_explain(S, F, known, mkrng(SEED, PERM, E), n_perm=cfg.n_perm, alpha=cfg.alpha,
+                                        max_new=cfg.max_open - len(s["opened"]), chunk=cfg.perm_chunk):
+                        s["opened"].append({"cand": int(c), "name": CAND_B_NAMES[int(c)], "episode": E})
+                s = st["S1_v3"]
+                if len(s["opened"]) < cfg.max_open:
+                    known = prac_s1 + [o["cand"] for o in s["opened"]]
+                    c, padj, name = s1_round_v3(S, F, known, E, alpha1)
+                    s["rounds"].append({"E": E, "best": name, "padj": padj})
+                    if c is not None:
+                        s["opened"].append({"cand": int(c), "name": CAND_B_NAMES[int(c)], "episode": E, "padj": padj})
+                s = st["S1_v3z"]
+                if len(s["opened"]) < cfg.max_open:
+                    known = prac_s1 + [o["cand"] for o in s["opened"]]
+                    c, z, name = s1_z(S, F, known)
+                    s["rounds"].append({"E": E, "best": name, "z": z})
+                    if c is not None and z > z1:
+                        s["opened"].append({"cand": int(c), "name": name, "episode": E, "z": z})
+        ref = REF["conditions"][cond]
+        repro = {
+            "M3_noticed": m3_noticed == ref["M3-B"]["noticed"],
+            "M3_opened": [(o["cand"], o["episode"]) for o in st["M3_v2"]["opened"]]
+            == [(o["cand"], o["episode"]) for o in ref["M3-B"]["opened"]]
+            and all(abs(a["gain"] - b["gain"]) < 1e-10 for a, b in zip(st["M3_v2"]["opened"], ref["M3-B"]["opened"])),
+            "S1_noticed": s1_noticed_seen == ref["S1-B"]["noticed"],
+            "S1_opened": [(o["cand"], o["episode"]) for o in st["S1_v2"]["opened"]]
+            == [(o["cand"], o["episode"]) for o in ref["S1-B"]["opened"]],
+        }
+        deploy[cond] = {"m3_noticed": m3_noticed, "s1_noticed": s1_noticed_seen, "repro": repro, "rules": st}
+        log(f"{cond}: Nachbau {repro}; v3_row {[o['name'] for o in st['M3_v3_row']['opened']]} "
+            f"v3_ep {[o['name'] for o in st['M3_v3_ep']['opened']]} S1_v3 {[o['name'] for o in st['S1_v3']['opened']]} "
+            f"S1_v3z {[o['name'] for o in st['S1_v3z']['opened']]}")
+
+    out = {"seed": SEED, "smoke": SMOKE, "check": check, "delta0": delta0, "p_global": pg,
+           "m3_threshold": p1.m3_threshold, "cusum": [p1.cusum_k, p1.cusum_h],
+           "practice": {"M3-B": [CAND_B_NAMES[c] for c in prac_m3], "S1-B": [CAND_B_NAMES[c] for c in prac_s1]},
+           "delta1_row": d1_row, "delta1_ep": d1_ep, "alpha1": alpha1, "z1": z1, "n_perm_v3": N_PERM_V3,
+           "null_series": series, "deploy": deploy, "sec": round(time.time() - t_start)}
+    json.dump(out, open(f"d1_{SEED}{'_smoke' if SMOKE else ''}.json", "w"), indent=1)
+    log(f"fertig ({out['sec']} s)")
+
+
+def d3():
+    cfg = replace(FROZEN, systems=("M3-A",))
+    fit_kw = run._fit_kw(cfg)
+    p1 = run.train_phase1(SEED, cfg)
+    t0 = time.time()
+    prac = run._pre_open_practice(SEED, cfg, p1.forward, p1.routine.encode(p1.practice_obs), p1.practice_obs,
+                                  p1.practice_actions, p1.practice_disps)["M3-A"]
+    pre_sec = time.time() - t0
+    ok = prac == [e["cand"] for e in REF["practice"]["M3-A"]]
+    log(f"Vor-Öffnen M3-A {pre_sec:.0f} s, gleich wie Referenz: {ok}")
+    trajs = [t for _, t in run.routine_rollouts(p1.routine, SEED, NULL, cfg.n_null_episodes, cfg,
+                                                 p_slip=cfg.p_slip, stream=0)]
+    p1 = replace(p1, cusum_k=np.inf, cusum_h=np.inf)          # CUSUM spielt hier keine Rolle
+    rounds = []
+    for E, obs, A, D, S, ids, _ in checkpoints(trajs, p1, cfg):
+        if len(A) < cfg.notice_window:
+            continue
+        t1 = time.time()
+        imp, cand = imp_split(p1.routine.encode(obs), A, D, candidates_A(obs, A), prac, E, "row", ids, fit_kw)
+        k, g = best_eligible(imp)
+        rounds.append({"E": E, "n": int(len(A)), "sec": time.time() - t1, "G": g,
+                       "best": None if k is None else candidate_name("A", int(cand[k]))})
+        log(f"E {E}: {rounds[-1]['sec']:.1f} s, G {g:.5f}")
+        if SMOKE and len(rounds) >= 2:
+            break
+    out = {"seed": SEED, "smoke": SMOKE, "practice_ok": ok, "pre_open_sec": pre_sec, "rounds": rounds,
+           "T0": max(r["G"] for r in rounds), "delta_v2": REF["delta"]["M3-A"], "sec": round(time.time() - t_start)}
+    json.dump(out, open(f"d3_{SEED}{'_smoke' if SMOKE else ''}.json", "w"), indent=1)
+    log(f"fertig ({out['sec']} s)")
+
+
+{"d1": d1, "d3": d3}[MODE]()

@@ -342,3 +342,29 @@ Der Nutzer hat die Entscheidungen E1–E8 des v3-Entwurfs getroffen, alle wie em
   - S1-A nur beschreibend mit der unkalibrierten v2-Regel (E5).
 - **Seeds:** Bestätigung 520–524, Hauptlauf 600–609 (E7).
 - **Nächster Schritt:** Entwicklungsprüfungen D1–D3 auf verbrauchten Seeds (E6). Ihr Ergebnis ist keine Evidenz. Es darf die Varianten nur mit erneuter Entscheidung des Nutzers ändern.
+
+## Entwicklungsprüfungen D1–D3 für v3 (07.10.2026)
+
+Freigegeben mit E6. Gerechnet auf den verbrauchten Seeds 400–409 und 510–514. Das sind Entwicklungsdaten, keine Evidenz. Daten, Skript und Auswertung: `results/entwicklung_v3/`. Code und Freeze von v2 sind unverändert; `freeze verify`: OK.
+
+**Prüfgerüst:** Es baut v2 auf allen 15 Seeds in allen vier Bedingungen exakt nach, Bemerken und Öffnungen von M3-B und S1-B.
+
+**Ergebnis:**
+- **M3-B mit Serien-δ₁:**
+  - `red`: 15/15 richtig.
+  - `global`: Zeilen 1/15 falsch (Seed 510), Episoden 0/15.
+  - `walls` und `none`: 0.
+  - Zusatzöffnungen: 0.
+  - Latenz 400–409: 51 (Zeilen) bzw. 63 (Episoden).
+- **Abstände:**
+  - δ₁ wird meist von frühen Runden mit kleinem Puffer bestimmt (E = 30–90).
+  - Die knappste richtige Öffnung liegt beim 1,09-Fachen (Zeilen) bzw. 1,06-Fachen (Episoden) von δ₁.
+- **S1-B:**
+  - Holm-p als Serienstatistik ist unbrauchbar: Die Schwelle liegt auf der Untergrenze der Permutationen, S1 öffnet nie.
+  - Die stetige z-Variante gibt `red` 14/15 und `global` 0/15.
+- **D3, M3-A:** etwa 39 min je Null-Strom, also etwa 13 CPU-Stunden je Seed.
+
+**Offen, Entscheidung des Nutzers nötig:**
+- E9: S1 auf der z-Statistik statt auf Holm-p.
+- E10: Umgang mit kleinen Puffern: so lassen, erst bei vollem Puffer erklären, oder den Gewinn auf die Puffergröße normieren.
+- E2 erneut ansehen, angesichts von Seed 510.

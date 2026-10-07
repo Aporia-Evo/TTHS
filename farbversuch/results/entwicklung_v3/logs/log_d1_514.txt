@@ -1,0 +1,27 @@
+14:08:45 Phase 1 fertig, Prüfungen {'practice_M3B': True, 'practice_S1B': True, 'delta_M3B': True, 'p_global': True, 'm3_threshold': True}
+14:09:32 Null-Strom 0: T_row 0.00169 T_ep 0.00223 Q 0.00050 Z 7.09
+14:10:19 Null-Strom 1: T_row 0.00115 T_ep 0.00071 Q 0.00050 Z 4.38
+14:11:05 Null-Strom 2: T_row 0.00281 T_ep 0.00934 Q 0.00050 Z 5.52
+14:11:52 Null-Strom 3: T_row 0.00224 T_ep 0.00322 Q 0.00050 Z 4.28
+14:12:37 Null-Strom 4: T_row 0.00137 T_ep 0.00274 Q 0.00050 Z 5.45
+14:13:24 Null-Strom 5: T_row 0.00125 T_ep 0.00271 Q 0.00050 Z 5.64
+14:14:09 Null-Strom 6: T_row 0.00262 T_ep 0.00302 Q 0.00100 Z 4.02
+14:14:56 Null-Strom 7: T_row 0.00142 T_ep 0.00113 Q 0.00050 Z 5.28
+14:15:42 Null-Strom 8: T_row 0.00173 T_ep 0.00000 Q 0.00050 Z 4.79
+14:16:30 Null-Strom 9: T_row 0.00089 T_ep 0.00259 Q 0.00050 Z 4.12
+14:17:18 Null-Strom 10: T_row 0.00000 T_ep 0.00000 Q 0.00050 Z 5.54
+14:18:07 Null-Strom 11: T_row 0.00063 T_ep 0.00248 Q 0.00050 Z 5.74
+14:18:53 Null-Strom 12: T_row 0.00127 T_ep 0.00416 Q 0.00050 Z 4.48
+14:19:42 Null-Strom 13: T_row 0.00162 T_ep 0.00169 Q 0.00050 Z 6.50
+14:20:30 Null-Strom 14: T_row 0.00000 T_ep 0.00729 Q 0.00050 Z 4.84
+14:21:18 Null-Strom 15: T_row 0.00209 T_ep 0.00211 Q 0.00050 Z 4.62
+14:22:06 Null-Strom 16: T_row 0.00082 T_ep 0.00150 Q 0.00050 Z 4.96
+14:22:53 Null-Strom 17: T_row 0.00151 T_ep 0.00203 Q 0.00050 Z 9.43
+14:23:38 Null-Strom 18: T_row 0.00278 T_ep 0.00636 Q 0.00050 Z 5.17
+14:24:24 Null-Strom 19: T_row 0.00295 T_ep 0.00516 Q 0.00050 Z 5.49
+14:24:24 δ1_row 0.00295 δ1_ep 0.00934 α1 0.00050 z1 9.43
+14:24:24 none: Nachbau {'M3_noticed': True, 'M3_opened': True, 'S1_noticed': True, 'S1_opened': True}; v3_row [] v3_ep [] S1_v3 [] S1_v3z []
+14:25:03 red: Nachbau {'M3_noticed': True, 'M3_opened': True, 'S1_noticed': True, 'S1_opened': True}; v3_row ['Farbe 0'] v3_ep ['Farbe 0'] S1_v3 [] S1_v3z ['Farbe 0']
+14:25:48 global: Nachbau {'M3_noticed': True, 'M3_opened': True, 'S1_noticed': True, 'S1_opened': True}; v3_row [] v3_ep [] S1_v3 [] S1_v3z []
+14:25:49 walls: Nachbau {'M3_noticed': True, 'M3_opened': True, 'S1_noticed': True, 'S1_opened': True}; v3_row [] v3_ep [] S1_v3 [] S1_v3z []
+14:25:49 fertig (1137 s)

@@ -1,0 +1,97 @@
+"""Auswertung der Entwicklungsprüfungen D1–D3 (Bewertung nach Spec v3 §8, erste Öffnung entscheidet)."""
+import json
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).parent
+SPIKE = Path("/home/user/TTHS/farbversuch/results/nachtrag_diagnose")
+SEEDS = [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 510, 511, 512, 513, 514]
+SWITCH = 100
+COLOURS = {"Farbe 0", "Farbe 1", "Farbe 2", "Farbe 3"}
+
+
+def first(rule):
+    return rule["opened"][0] if rule["opened"] else None
+
+
+def verdict(cond, rule):
+    """Nach §8: red Treffer = erste Öffnung Farbe 0 bei E > 100; sonst jede erste Öffnung ein Fehler."""
+    f = first(rule)
+    extras = [o["name"] for o in rule["opened"][1:]]
+    if cond == "red":
+        hit = f is not None and f["name"] == "Farbe 0" and f["episode"] > SWITCH
+        return {"hit": hit, "lat": f["episode"] - SWITCH if hit else None,
+                "first": None if f is None else (f["name"], f["episode"]), "extras": extras}
+    return {"opened": f is not None, "first": None if f is None else (f["name"], f["episode"]), "extras": extras}
+
+
+rows = []
+for s in SEEDS:
+    p = HERE / f"d1_{s}.json"
+    if not p.exists():
+        print("fehlt", s)
+        continue
+    d = json.load(open(p))
+    rep = {c: all(v["repro"].values()) for c, v in d["deploy"].items()}
+    ser = d["null_series"]
+    # wo liegt das Serienmaximum: früh (E <= 100) oder später?
+    early_row = sum(max(r.get("G_row", 0) for r in st["rounds"] if r["E"] <= 100) >=
+                    max(r.get("G_row", 0) for r in st["rounds"]) and st["T"]["row"] > 0 for st in ser)
+    floor = len([1 for st in ser if abs(st["T"]["Q"] - d["alpha1"]) < 1e-12])
+    spike_ok = None
+    if (SPIKE / f"out_{s}.json").exists():
+        sp = json.load(open(SPIKE / f"out_{s}.json"))
+        spike_ok = all(abs(max([r.get("G_row", 0) for r in st["rounds"] if r["E"] >= 110] or [0]) - spk["max"]) < 1e-12
+                       for st, spk in zip(ser, sp["null_row"]))
+    out = {"seed": s, "checks": all(v for v in d["check"].values() if v is not None), "repro": rep,
+           "spike_row_gleich": spike_ok, "delta0": d["delta0"], "d1_row": d["delta1_row"], "d1_ep": d["delta1_ep"],
+           "alpha1": d["alpha1"], "alpha1_streams_at_min": floor, "z1": d["z1"], "early_max_row": early_row,
+           "n_streams": len(ser), "rules": {}}
+    for cond, v in d["deploy"].items():
+        for rule, st in v["rules"].items():
+            out["rules"].setdefault(rule, {})[cond] = verdict(cond, st)
+    # Abstände (gleiche Teilung): red-Gewinn der richtigen ersten Öffnung / δ1, bester global-Gewinn / δ1
+    marg = {}
+    for rule, key in (("M3_v3_row", "d1_row"), ("M3_v3_ep", "d1_ep")):
+        dl = out[key]
+        red = d["deploy"]["red"]["rules"][rule]
+        f = first(red)
+        marg[rule] = {"red_first_ratio": None if f is None or dl == 0 else f["gain"] / dl,
+                      **{f"{c}_max_ratio": max([r["gain"] for r in d["deploy"][c]["rules"][rule]["rounds"]] or [0]) / dl
+                         if dl else None for c in ("global", "walls", "none")}}
+    out["margins"] = marg
+    rows.append(out)
+
+json.dump(rows, open(HERE / "summary.json", "w"), indent=1)
+
+print("seed checks repro(spike) δ0 δ1_row δ1_ep | α1 (Ströme am Min.) z1 | Serienmax früh (row)")
+for r in rows:
+    print(r["seed"], r["checks"], all(r["repro"].values()), r["spike_row_gleich"], f"{r['delta0']:.4f}",
+          f"{r['d1_row']:.4f}", f"{r['d1_ep']:.4f}", "|", f"{r['alpha1']:.5f}", r["alpha1_streams_at_min"],
+          f"{r['z1']:.2f}", "|", r["early_max_row"], "/", r["n_streams"])
+
+print("\nRegel: red Treffer (Latenz) | global/walls/none: Seeds mit Öffnung | Zusatzöffnungen red")
+for rule in ("M3_v2", "M3_v3_row", "M3_v3_ep", "S1_v2", "S1_v3", "S1_v3z"):
+    def grp(seeds):
+        R = [r for r in rows if r["seed"] in seeds]
+        hits = [r["rules"][rule]["red"] for r in R]
+        lat = [h["lat"] for h in hits if h["hit"]]
+        o = {c: sum(r["rules"][rule][c]["opened"] for r in R) for c in ("global", "walls", "none")}
+        ex = sum(len(h["extras"]) for h in hits)
+        return (f"red {sum(h['hit'] for h in hits)}/{len(R)} (Lat. {sum(lat)/len(lat) if lat else float('nan'):.0f}) "
+                f"global {o['global']} walls {o['walls']} none {o['none']} extras {ex}")
+    print(f"{rule:10s} 400–409: {grp(range(400, 410))} || 510–514: {grp(range(510, 515))}")
+
+print("\nAbstände (gleiche Teilung): min red/δ1, max global/δ1, max walls/δ1")
+for rule in ("M3_v3_row", "M3_v3_ep"):
+    m = [r["margins"][rule] for r in rows]
+    red = [x["red_first_ratio"] for x in m if x["red_first_ratio"] is not None]
+    print(rule, f"{min(red):.2f}", f"{max(x['global_max_ratio'] or 0 for x in m):.2f}",
+          f"{max(x['walls_max_ratio'] or 0 for x in m):.2f}")
+
+d3 = HERE / "d3_400.json"
+if d3.exists():
+    d = json.load(open(d3))
+    secs = [r["sec"] for r in d["rounds"]]
+    print(f"\nD3 M3-A Seed 400 Strom 0: {len(secs)} Runden, {sum(secs)/60:.1f} min, je Runde {min(secs):.0f}–{max(secs):.0f} s, "
+          f"T0 {d['T0']:.4f} (v2-δ {d['delta_v2']:.4f}), Vor-Öffnen {d['pre_open_sec']:.0f} s")
