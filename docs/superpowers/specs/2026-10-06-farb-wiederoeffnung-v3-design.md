@@ -1,6 +1,10 @@
 # Farbversuch v3: Erklären über die ganze Serie kalibrieren (ENTWURF)
 
-**Status: Entwurf vom 06.10.2026.** Nicht freigegeben, nicht eingefroren. Die offenen Entscheidungen stehen in §12. Kein Lauf auf frischen Seeds, bevor der Nutzer sie getroffen und den Entwurf freigegeben hat.
+**Status: Entwurf vom 06.10.2026; Entscheidungen E1–E8 des Nutzers vom 07.10.2026 eingetragen (§12).** Nicht eingefroren.
+- Nächster Schritt sind die Entwicklungsprüfungen D1–D3 auf verbrauchten Seeds (§9.0).
+- Ihr Ergebnis kann die Varianten noch ändern, dann nur mit erneuter Entscheidung des Nutzers.
+- Danach folgen der Umsetzungsplan und die Umsetzung.
+- Kein Lauf auf frischen Seeds ohne ausdrückliche Freigabe.
 
 **Grundlagen:**
 - Spec v2 (`2026-10-03-farb-wiederoeffnung-v2-design.md`), eingefroren mit `b9589ce`;
@@ -95,6 +99,7 @@ Abstände zur Schwelle, je Teilung mit eigener Schwelle:
 - **K2:** Die Schwelle von S1 wird ebenso über die Serie kalibriert, auf dem Holm-adjustierten p-Wert (§7.1).
 - **K3:** Zusatzöffnungen werden ausdrücklich behandelt (§5, Entscheidung E3).
 - **K4:** Die Permutationszahl von S1-B steigt von 1000 auf 10.000, damit die Serienschwelle auflösbar ist (§7.1).
+- **K5:** S1 öffnet höchstens ein Merkmal je Runde, das erste in Holm-Reihenfolge (E8, §8). Damit gilt für M3 und S1 dieselbe Trefferdefinition.
 
 **Bleibt wie in v2 (eingefroren `b9589ce`):**
 - Welt, Bedingungen, Wechsel bei Episode 100, 400 Episoden;
@@ -212,7 +217,7 @@ Nach einer ersten Öffnung, insbesondere nach einem echten Treffer unter `red`, 
   - **Für M3-A nicht machbar:** 1192 + C(1192, 2) Basen.
   - **Abgedeckt** ist die Mehrfachprüfung bei geänderter Basis unter der vollständigen Nullhypothese.
   - **Nicht abgedeckt** ist die teilweise Nullhypothese nach einem echten Treffer. Der Einsatzstrom enthält dann einen echten Effekt und ist mit Null-Strömen nicht austauschbar; auch Fehlspezifikation bleibt außen vor.
-- **Z3, die erste Öffnung entscheidet (Empfehlung):**
+- **Z3, die erste Öffnung entscheidet (gewählt, E3):**
   - Vorhersagen, Abbruchkriterium und Bestätigung zählen **nur die erste Öffnung** je Strom.
   - Zusatzöffnungen laufen mit δ₁ weiter. Sie werden getrennt beschrieben: Merkmal, Episode, Gewinn, Gewinn/δ₁.
   - Sie tragen keine Fehlergarantie und gehen in kein Urteil ein.
@@ -238,7 +243,7 @@ Nach einer ersten Öffnung, insbesondere nach einem echten Treffer unter `red`, 
   - in der Trennschärfe;
   - in der Bedeutung des Gewinns: Bei Episodenteilung heißt er Vorhersage auf ungesehenen Episoden und Karten.
 - **Befund:** Die Daten in B4 unterscheiden die Teilungen nicht.
-- **Empfehlung (E2):**
+- **Gewählt (E2):**
   - Bestätigend wird nach Zeilen geteilt, nach dem Grundsatz „eine Änderung zur Zeit“.
   - Die Teilung nach Episoden läuft als vorab festgelegte Nebenauswertung auf denselben Strömen mit eigenem δ₁ nach §3.7. Sie wird nur beschrieben.
   - Alternative: Episoden bestätigend. Die Wahl fällt vor der Bestätigung.
@@ -268,13 +273,13 @@ Nach einer ersten Öffnung, insbesondere nach einem echten Treffer unter `red`, 
 
 **Einsatz:**
 - Abgelehnt, also geöffnet, wird c genau dann, wenn p̃_c < α₁ (strikt). Das ist Holm auf Stufe α₁ mit strikter Ungleichung.
-- Höchstens 3 Öffnungen wie in v2.
+- Höchstens ein Merkmal je Runde (E8), insgesamt höchstens 3 wie in v2.
 - Kalibriert und entschieden wird auf derselben Größe. Rohes Minimum und Holm werden nicht gemischt.
 
 **Auflösung:** Es gilt p ≥ 1/(n_perm + 1), also Q ≥ m/(n_perm + 1).
 - **S1-B** (m ≤ 6): Mit 1000 Permutationen liegt die Untergrenze bei 0,006, nahe an der erwarteten Schwelle. Deshalb `n_perm` = 10.000, Untergrenze 0,0006.
 - **S1-A** (m ≈ 1190): Mit 25.000 Permutationen liegt die Untergrenze bei 0,048. Eine Serienschwelle ist damit nicht sinnvoll; dafür bräuchte es etwa 10⁶ Permutationen je Runde.
-  - Vorschlag: S1-A in v3 nur als unkalibrierte v2-Regel beschreiben oder weglassen (E5).
+  - Gewählt (E5): S1-A läuft in v3 mit der unkalibrierten v2-Regel mit und wird nur beschreibend berichtet, ausdrücklich als unkalibriert gekennzeichnet.
   - Keine Vorhersage hängt an S1-A.
 
 **Grenze:** Für die erste Öffnung von S1 gilt dieselbe Grenze und dieselbe Reichweite wie in §4.
@@ -301,7 +306,12 @@ Nach einer ersten Öffnung, insbesondere nach einem echten Treffer unter `red`, 
 
 **Zusatzöffnungen:** Für M3-A ist Z2 nicht machbar (§5.2). Mit Z3 werden M3-A und M3-B gleich behandelt.
 
-**M3-A weglassen** wäre eine **Einengung der Forschungsfrage** (E4).
+**Gewählt (E4): M3-A nur im Hauptlauf.**
+- Die Bestätigung 520–524 läuft ohne M3-A, denn ihre Regel betrifft nur M3-B.
+- Der Hauptlauf 600–609 läuft mit M3-A und voller Serienkalibrierung; P4 bleibt.
+- D3 (§9.0) misst die Kosten vorher an einem verbrauchten Seed.
+
+**Verworfene Alternative:** M3-A weglassen hätte die **Forschungsfrage eingeengt**.
 - v3 fragt dann nicht mehr, ob die Kandidatenmenge (6 Zielzellen-Merkmale gegen 1192 Rohbit×Aktion) für das Wiederöffnen zählt.
 - **P4 entfällt ausdrücklich.** P1–P3 und P5 bleiben.
 - Das geschieht nur auf Entscheidung des Nutzers.
@@ -315,9 +325,9 @@ Hauptlauf: Seeds 600–609. Die Schwellen sind wie in v2, damit beide vergleichb
 **Bewertung bei Z3 (erste Öffnung je Strom):**
 - **Treffer unter `red`:** Die erste Öffnung des Stroms ist das richtige Merkmal (wie v2 §6) und liegt bei E > 100.
   - Eine erste Öffnung vor dem Wechsel ist kein Treffer.
-  - **M3 und S1 werden mit derselben Definition bewertet** (E8). S1 kann in v2 bis zu 3 Merkmale in einer Runde öffnen. „Treffer, wenn das richtige Merkmal unter den Öffnungen der ersten Runde ist“ wäre für S1 nachsichtiger als für M3 und würde P5 verzerren. Varianten:
-    - **S1 öffnet höchstens ein Merkmal je Runde (Empfehlung):** das erste in Holm-Reihenfolge, also kleinster p-Wert, dann größte Differenz, dann kleinster Index. „Erste Öffnung“ ist dann für beide Verfahren ein einzelnes Merkmal. §4 bleibt gültig, weil eine erste Öffnung weiter jede Ablehnung voraussetzt.
-    - **S1 wie v2:** Treffer nur, wenn das richtige Merkmal in der ersten Runde in Holm-Reihenfolge vorn liegt. Die übrigen Merkmale dieser Runde zählen als falsche erste Öffnungen.
+  - **M3 und S1 werden mit derselben Definition bewertet** (E8). S1 kann in v2 bis zu 3 Merkmale in einer Runde öffnen. „Treffer, wenn das richtige Merkmal unter den Öffnungen der ersten Runde ist“ wäre für S1 nachsichtiger als für M3 und würde P5 verzerren. Gewählt ist die erste der beiden Varianten:
+    - **S1 öffnet höchstens ein Merkmal je Runde (gewählt, E8):** das erste in Holm-Reihenfolge, also kleinster p-Wert, dann größte Differenz, dann kleinster Index. „Erste Öffnung“ ist dann für beide Verfahren ein einzelnes Merkmal. §4 bleibt gültig, weil eine erste Öffnung weiter jede Ablehnung voraussetzt.
+    - *Verworfen:* **S1 wie v2.** Treffer nur, wenn das richtige Merkmal in der ersten Runde in Holm-Reihenfolge vorn liegt. Die übrigen Merkmale dieser Runde zählen als falsche erste Öffnungen.
   - Treffer, erste Öffnung und Latenz bestimmt für alle Systeme **eine einzige Auswertungsfunktion** (Test T8).
 - **Falsche erste Öffnung:**
   - in `none`, `global` und `walls` jede erste Öffnung eines Farbmerkmals;
@@ -345,10 +355,10 @@ Hauptlauf: Seeds 600–609. Die Schwellen sind wie in v2, damit beide vergleichb
 
 ### 9.0 Entwicklung (keine Evidenz)
 - Umsetzung testgetrieben (§10). Läufe mit voller Konfiguration nur auf verbrauchten Seeds.
-- Empfohlene Entwicklungsprüfungen, nur mit Freigabe des Nutzers (E6). Ihr Ergebnis darf die Varianten noch ändern, weil es Entwicklungsdaten sind:
+- Entwicklungsprüfungen, vom Nutzer freigegeben (E6). Ihr Ergebnis darf die Varianten noch ändern, weil es Entwicklungsdaten sind:
   - **D1:** δ₁ nach §3 mit allen zulässigen Zeitpunkten auf 400–409 und 510–514. Nachspielung aller vier Bedingungen, auch `walls` und `none`, für M3-B mit beiden Teilungen. Schließt U1, U2 und U5 als Entwicklungsbefund.
   - **D2:** S1-B nach §7.1 auf denselben Seeds.
-  - **D3:** Nur wenn M3-A bleibt: Kosten von M3-A an einem Strom messen, ≈ 45 min.
+  - **D3:** Kosten von M3-A an einem Strom messen, ≈ 45 min (nötig für E4).
 
 ### 9.1 Nachweis der Nichtnutzung, vor jeder Stufe neu
 **Geprüft wird:**
@@ -366,8 +376,10 @@ Das Ergebnis kommt ins Protokoll.
 
 ### 9.2 Bestätigung auf 520–524
 
+**Systeme:** M3-B, S1-B und S1-A, ohne M3-A (E4).
+
 **Vorher festgelegt und als Commit abgelegt:**
-- Konfiguration und Varianten E2–E5;
+- Konfiguration und Varianten E2–E5 und E8;
 - Code-Stand;
 - diese Regel.
 
@@ -445,7 +457,9 @@ Alle v2-Tests bleiben. Neu:
 | Rest wie v2 ohne M3-A (Phase 1, Einsatz) | ≈ 3 min | v2, Seed 400: Phase 1 ohne M3-A ≈ 110 s, Einsatz ohne M3-A ≈ 30 s |
 | Rest wie v2 mit M3-A | ≈ 1,5 CPU-h | v2: Seed 400 insgesamt 5265 s |
 
-**Gesamt auf 4 Kernen:**
+**Gesamt auf 4 Kernen, nach E4:** Bestätigung ohne M3-A etwa 40 min, Hauptlauf mit M3-A etwa 40 h.
+
+**Zum Vergleich:**
 - **ohne M3-A** (≈ 20 min je Seed): Bestätigung etwa 40 min, Hauptlauf etwa 1 h.
 - **mit M3-A** (≈ 16 CPU-h je Seed): Bestätigung etwa 20 h, Hauptlauf etwa 40 h.
   - Das setzt voraus, dass der Treiber über Kalibrierströme parallelisiert. Wird wie in v2 nur über Seeds und Bedingungen parallelisiert, dauert die Bestätigung mit 5 Seeds auf 4 Kernen etwa 34 h.
@@ -454,16 +468,18 @@ Dazu kommen Umsetzung mit Tests, Entwicklungsprüfungen (D1 ≈ 1–1,5 h auf 4 
 
 ---
 
-## 12. Offene Entscheidungen
+## 12. Entscheidungen (Nutzer, 07.10.2026)
 
-- **E1:** Kern K1/K2 annehmen (Serienkalibrierung für die erste Öffnung, §3, §7.1)?
-- **E2:** Teilung bestätigend nach Zeilen, mit Nebenauswertung nach Episoden (Empfehlung), oder bestätigend nach Episoden?
-- **E3:** Zusatzöffnungen nach Z1, Z2 oder Z3 (Empfehlung Z3)?
-- **E4:** M3-A behalten (≈ 40 h Hauptlauf auf 4 Kernen) oder weglassen? Weglassen engt die Frage ein, P4 entfällt.
-- **E5:** S1-A unkalibriert nur beschreiben oder weglassen?
-- **E6:** Entwicklungsprüfungen D1–D3 auf verbrauchten Seeds freigeben? Dafür werden Routinen verbrauchter Seeds deterministisch neu berechnet; ein neues Training mit neuen Einstellungen ist das nicht.
-- **E7:** Seeds bestätigen: 520–524 für die Bestätigung, 600–609 für den Hauptlauf.
-- **E8:** S1 höchstens ein Merkmal je Runde (Empfehlung) oder S1 wie v2 mit strenger Trefferdefinition (§8)?
+| | Frage | Entscheidung |
+|---|---|---|
+| E1 | Serienkalibrierung als Kern (§3, §7.1) | angenommen |
+| E2 | Teilung | bestätigend nach Zeilen; Episoden als beschreibende Nebenauswertung mit eigener Schwelle |
+| E3 | Zusatzöffnungen | Z3: Nur die erste Öffnung zählt, weitere werden beschrieben |
+| E4 | M3-A | nur im Hauptlauf 600–609, volle Serienkalibrierung, P4 bleibt; Bestätigung ohne M3-A |
+| E5 | S1-A | unkalibrierte v2-Regel, nur beschreibend |
+| E6 | Entwicklungsprüfungen D1–D3 | freigegeben |
+| E7 | Seeds | Bestätigung 520–524, Hauptlauf 600–609 |
+| E8 | Trefferdefinition S1 | S1 öffnet höchstens ein Merkmal je Runde |
 
 ---
 

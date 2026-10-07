@@ -326,8 +326,19 @@ An Code, Konfiguration, Schwellen und Auswertung wurde nichts geändert. Die See
 **Korrektur einer früheren mündlichen Aussage:** Der Vergleich „Episodenteilung macht δ doppelt so groß (0,0062) und verfehlt damit den kleinsten echten Gewinn (0,0041)“ verglich Größen aus verschiedenen Teilungen. Er ist ungültig.
 
 **Weiter:**
-- Entwurf `docs/superpowers/specs/2026-10-06-farb-wiederoeffnung-v3-design.md`; offene Entscheidungen dort in §12.
+- Entwurf `docs/superpowers/specs/2026-10-06-farb-wiederoeffnung-v3-design.md`; Entscheidungen dort in §12.
 - Für eine v3 vorgesehen: 520–524 (Bestätigung) und 600–609 (Hauptlauf).
 - Nichtnutzung am 06.10.2026 geprüft:
   - Ergebnisordner, Git-Historie, alle Befehlsprotokolle dieser Sitzung und ihrer Teilagenten sowie der Arbeitsordner;
   - beide Bereiche kommen nur als vorgeschlagene Nummern in Texten vor.
+
+## Entscheidungen zu v3 (07.10.2026)
+
+Der Nutzer hat die Entscheidungen E1–E8 des v3-Entwurfs getroffen, alle wie empfohlen. Einzelheiten stehen in Spec v3, §12.
+- **Kern:** Serienkalibrierung (E1). Die Teilung bleibt bestätigend nach Zeilen, die Teilung nach Episoden läuft als Nebenauswertung mit (E2).
+- **Bewertung:** Nur die erste Öffnung zählt (E3). S1 öffnet höchstens ein Merkmal je Runde (E8).
+- **Systeme:**
+  - M3-A nur im Hauptlauf (E4);
+  - S1-A nur beschreibend mit der unkalibrierten v2-Regel (E5).
+- **Seeds:** Bestätigung 520–524, Hauptlauf 600–609 (E7).
+- **Nächster Schritt:** Entwicklungsprüfungen D1–D3 auf verbrauchten Seeds (E6). Ihr Ergebnis ist keine Evidenz. Es darf die Varianten nur mit erneuter Entscheidung des Nutzers ändern.
