@@ -1,0 +1,130 @@
+"""Auswertung E10 und mechanische Anwendung der vorab festgelegten Auswahlregel (PROTOKOLL, 08.10.2026)."""
+import json
+import statistics as st
+from pathlib import Path
+
+HERE = Path(__file__).parent
+SEEDS = [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 510, 511, 512, 513, 514]
+SWITCH, N = 100, 2000
+COMBOS = [f"{v}_{s}" for v in "abc" for s in ("row", "ep")]
+R = {s: json.load(open(HERE / f"e10_{s}.json")) for s in SEEDS}
+
+
+def first(rule):
+    return rule["opened"][0] if rule["opened"] else None
+
+
+def evaluate(combo):
+    hits, lat, margins, opens, extras, gmax = 0, [], [], {"global": 0, "walls": 0, "none": 0}, 0, 0.0
+    per_seed = {}
+    for s, d in R.items():
+        red = d["deploy"]["red"]["rules"][combo]
+        f = first(red)
+        hit = f is not None and f["name"] == "Farbe 0" and f["episode"] > SWITCH
+        hits += hit
+        if hit:
+            lat.append(f["episode"] - SWITCH)
+            if f["ratio"] is not None:          # nur v2 mit δ = 0 hat keinen Abstand
+                margins.append((f["ratio"], s))
+        extras += max(0, len(red["opened"]) - 1)
+        for c in opens:
+            opens[c] += first(d["deploy"][c]["rules"][combo]) is not None
+        gr = [r["ratio"] for r in d["deploy"]["global"]["rules"][combo]["rounds"] if r["ratio"] is not None]
+        gmax = max([gmax, *gr])
+        per_seed[s] = {"red_first": None if f is None else (f["name"], f["episode"], f["n"], None if f["ratio"] is None else round(f["ratio"], 2)),
+                       "global_first": None if first(d["deploy"]["global"]["rules"][combo]) is None else
+                       (first(d["deploy"]["global"]["rules"][combo])["name"], first(d["deploy"]["global"]["rules"][combo])["episode"]),
+                       "walls_first": None if first(d["deploy"]["walls"]["rules"][combo]) is None else
+                       (first(d["deploy"]["walls"]["rules"][combo])["name"], first(d["deploy"]["walls"]["rules"][combo])["episode"])}
+    mm = min(margins) if margins else (None, None)
+    return {"combo": combo, "red_hits": hits, "lat_mean": st.mean(lat) if lat else None, "lat": lat,
+            "min_margin": mm[0], "min_margin_seed": mm[1], "global": opens["global"], "walls": opens["walls"],
+            "none": opens["none"], "extras": extras, "global_max_ratio": gmax, "per_seed": per_seed}
+
+
+ev = {c: evaluate(c) for c in COMBOS + ["v2_row"]}
+
+# ---- Auswahlregel ----
+admissible = [c for c in COMBOS if ev[c]["red_hits"] >= 14 and ev[c]["global"] <= 1 and ev[c]["walls"] <= 1
+              and ev[c]["none"] == 0]
+if admissible:
+    best = max(ev[c]["min_margin"] for c in admissible)
+    tied = [c for c in admissible if ev[c]["min_margin"] >= 0.9 * best]
+    order_var = {"a": 0, "c": 1, "b": 2}
+    tied.sort(key=lambda c: (ev[c]["global"], ev[c]["global_max_ratio"], ev[c]["lat_mean"],
+                             0 if c.endswith("row") else 1, order_var[c[0]]))
+    choice = tied[0]
+else:
+    best, tied, choice = None, [], "a_row (keine zulässig, Nutzer entscheidet)"
+
+# ---- Pufferfüllzeit ----
+null_e500 = [f["E_500"] for d in R.values() for f in d["null_fill"]]
+null_full = [f["E_full"] for d in R.values() for f in d["null_fill"]]
+dep_fill = {c: ([d["deploy"][c]["E_500"] for d in R.values()], [d["deploy"][c]["E_full"] for d in R.values()])
+            for c in ("none", "red", "global", "walls")}
+
+# ---- Verlauf Farbe 0 (red, Basis Übungs-Ontologie) ----
+def detect(d, combo, cond="red"):
+    """Erster Prüfpunkt, an dem „Farbe 0“ mit Basis Übungs-Ontologie zulässig über der Schwelle liegt (ohne Bemerken)."""
+    v, split = combo.split("_")
+    th = d["thresholds"][combo]
+    for r in d["deploy"][cond]["trajectory"]:
+        if v == "b" and r["n"] != N:
+            continue
+        x = r[split]["Farbe 0"]
+        thr = th / r["n"] if v == "c" else th
+        if x["allpos"] and x["mean"] > thr:
+            return r["E"]
+    return None
+
+
+traj = {}
+for s, d in R.items():
+    t = d["deploy"]["red"]["trajectory"]
+    traj[s] = {"noticed": d["deploy"]["red"]["noticed"], "E_full": d["deploy"]["red"]["E_full"],
+               "row": [(r["E"], r["n"], round(r["row"]["Farbe 0"]["mean"], 4), r["row"]["Farbe 0"]["allpos"]) for r in t],
+               "ep": [(r["E"], r["n"], round(r["ep"]["Farbe 0"]["mean"], 4), r["ep"]["Farbe 0"]["allpos"]) for r in t],
+               "detect": {c: detect(d, c) for c in COMBOS},
+               "pre_switch_max_row": max([r["row"]["Farbe 0"]["mean"] for r in t if r["E"] <= SWITCH] or [None]),
+               "max_other_conds": {c: max(r["row"]["Farbe 0"]["mean"] for r in d["deploy"][c]["trajectory"])
+                                   for c in ("none", "global", "walls")}}
+
+out = {"evaluation": ev, "admissible": admissible, "best_min_margin": best, "tied": tied, "choice": choice,
+       "fill": {"null_E500": null_e500, "null_Efull": null_full, "deploy": dep_fill}, "trajectory_red_farbe0": traj,
+       "checks": {s: (d["check"], {c: d["deploy"][c]["repro"] for c in d["deploy"]}) for s, d in R.items()},
+       "thresholds": {s: d["thresholds"] for s, d in R.items()}}
+json.dump(out, open(HERE / "summary_e10.json", "w"), indent=1)
+
+# ---- Ausgabe ----
+ok = all(all(v for v in d["check"].values()) and all(all(x.values()) for x in [d["deploy"][c]["repro"] for c in d["deploy"]])
+         for d in R.values())
+print("Prüfungen und Nachbau (v2 und (a) = D1) auf allen Seeds:", ok)
+print("\nKombination | red richtig | Latenz Mittel | min. Abstand (Seed) | global | walls | none | Zusatz | max global/Schwelle")
+for c in ["v2_row"] + COMBOS:
+    e = ev[c]
+    print(f"{c:7s} | {e['red_hits']}/15 | {e['lat_mean']:.1f} | {e['min_margin'] or float('nan'):.2f} ({e['min_margin_seed']}) | "
+          f"{e['global']} | {e['walls']} | {e['none']} | {e['extras']} | {e['global_max_ratio']:.2f}")
+print("\nzulässig:", admissible, "| bester min. Abstand:", best, "| innerhalb 10 %:", tied, "| Wahl:", choice)
+print("\nSchwellen je Seed (row: a, b, c; ep: a, b, c):")
+for s, d in R.items():
+    t = d["thresholds"]
+    print(s, " ".join(f"{t[k]:.4f}" if not k.startswith("c") else f"{t[k]:.2f}" for k in
+                     ("a_row", "b_row", "c_row", "a_ep", "b_ep", "c_ep")))
+print("\nPufferfüllzeit (Episode des ersten Prüfpunkts): Null-Ströme n>=500", min(null_e500), "–", max(null_e500),
+      "| voll", min(x for x in null_full if x), "–", max(x for x in null_full if x), "Median", st.median(null_full))
+for c, (a, b) in dep_fill.items():
+    print(f"  {c}: n>=500 {min(a)}–{max(a)}, voll {min(b)}–{max(b)} (Median {st.median(b)})")
+print("\nred je Seed: bemerkt | voll | erste Öffnung (Name, E, n, Abstand) a_row / a_ep / b_row / b_ep / c_row / c_ep")
+for s in SEEDS:
+    print(s, traj[s]["noticed"], traj[s]["E_full"], " / ".join(str(ev[c]["per_seed"][s]["red_first"]) for c in COMBOS))
+print("\nglobal/walls erste Öffnungen (nur Seeds mit Öffnung):")
+for c in ["v2_row"] + COMBOS:
+    g = {s: v["global_first"] for s, v in ev[c]["per_seed"].items() if v["global_first"]}
+    w = {s: v["walls_first"] for s, v in ev[c]["per_seed"].items() if v["walls_first"]}
+    print(f"  {c}: global {g} walls {w}")
+print("\nFarbe 0 (red, Basis Übungs-Ontologie): bemerkt | erstmals über Schwelle a_row a_ep b_row b_ep c_row c_ep | "
+      "max vor Wechsel (row) | max in none/global/walls (row)")
+for s in SEEDS:
+    t = traj[s]
+    print(s, t["noticed"], "|", " ".join(str(t["detect"][c]) for c in COMBOS), "|", f"{t['pre_switch_max_row']:.4f}",
+          "|", " ".join(f"{v:.4f}" for v in t["max_other_conds"].values()))

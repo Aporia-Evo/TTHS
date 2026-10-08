@@ -1,0 +1,195 @@
+"""ENTWICKLUNGSPRÜFUNG E10 (Spec v3, PROTOKOLL „E10: Auswahlregel“) auf verbrauchten Seeds. Keine Evidenz.
+Ändert nichts am Repo.
+
+    python e10.py SEED
+
+Varianten (Kalibrierung und Einsatz gleich; n = Pufferschritte im Prüfpunkt):
+    (a) erklären bei n >= 500, Schwelle δ1 = max G             (Referenz, = D1)
+    (b) erklären nur bei n = buffer_size, δ1 = max G über diese Runden
+    (c) erklären bei n >= 500, Statistik n*G, κ1 = max n*G, öffnen wenn Mittel > κ1/n
+je Teilung nach Zeilen und nach Episoden. Null-Serien kommen aus D1 (results/entwicklung_v3/d1_SEED.json);
+die Einsatzströme werden neu nachgespielt. Zusätzlich: Pufferfüllzeiten und der Verlauf aller Kandidaten
+(insbesondere „Farbe 0“) mit Basis = Übungs-Ontologie bei jedem Prüfpunkt mit n >= 500.
+"""
+import os
+import sys
+
+for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS"):
+    os.environ[v] = "1"
+REPO = "/home/user/TTHS"
+sys.path.insert(0, REPO)
+
+import json
+import time
+from collections import deque
+from dataclasses import replace
+
+import numpy as np
+
+from farbversuch import monitor, run
+from farbversuch.config import Config
+from farbversuch.monitor import CAND_B_NAMES, RingBuffer, candidates_B, m3_improvements, select_m3
+from farbversuch.seeds import CV, rng as mkrng
+
+run._log = lambda m: None
+SEED = int(sys.argv[1])
+FROZEN = Config.from_json(f"{REPO}/farbversuch/frozen_config.json")
+REF = json.load(open(f"{REPO}/farbversuch/results/main/seed_{SEED}.json" if 400 <= SEED <= 409
+                     else f"{REPO}/farbversuch/results/confirm_510/seed_{SEED}.json"))
+D1 = json.load(open(f"{REPO}/farbversuch/results/entwicklung_v3/d1_{SEED}.json"))
+assert REF["config"] == FROZEN.as_dict()
+t_start = time.time()
+LOG = open(f"log_{SEED}.txt", "a")
+SPLITS = ("row", "ep")
+VARIANTS = ("a", "b", "c")
+
+
+def log(msg):
+    LOG.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+    LOG.flush()
+
+
+def best_eligible(imp):
+    el = (imp > 0).all(axis=1)
+    if not el.any():
+        return None, 0.0
+    means = np.where(el, imp.mean(axis=1), -np.inf)
+    k = int(np.argmax(means))
+    return k, float(means[k])
+
+
+def imp_split(Z, A, D, F, known, E, mode, ids, fit_kw):
+    if mode == "ep":
+        def ep_folds(n, r, n_folds=5):
+            assert len(ids) == n
+            groups = np.array_split(r.permutation(np.unique(ids)), n_folds)
+            return [np.flatnonzero(np.isin(ids, g)) for g in groups]
+        monitor.cv_folds, orig = ep_folds, monitor.cv_folds
+        try:
+            return m3_improvements(Z, A, D, F, known, mkrng(SEED, CV, E), **fit_kw)
+        finally:
+            monitor.cv_folds = orig
+    return m3_improvements(Z, A, D, F, known, mkrng(SEED, CV, E), **fit_kw)
+
+
+def checkpoints(trajs, p1, cfg):
+    enc, fwd = p1.routine.encode, p1.forward
+    buf, ids = RingBuffer(cfg.buffer_size), deque(maxlen=cfg.buffer_size)
+    for e, t in enumerate(trajs):
+        for o, a, d in zip(t.obs, t.actions, t.disps):
+            a, d = int(a), int(d)
+            s = float(fwd.surprise(enc(o[None]), np.array([a]), np.array([d]))[0])
+            buf.add(o, a, d, s)
+            ids.append(e)
+        E = e + 1
+        if E % cfg.check_interval == 0:
+            obs, A, D, S = buf.data()
+            yield E, obs, A, D, S, np.array(ids)
+
+
+def thresholds():
+    """Schwellen je Variante und Teilung aus den D1-Null-Serien (Runden mit n >= 500 tragen G_row/G_ep)."""
+    N = FROZEN.buffer_size
+    th, fill = {}, []
+    for split in SPLITS:
+        key = f"G_{split}"
+        rounds = [r for st in D1["null_series"] for r in st["rounds"] if key in r]
+        th[("a", split)] = max(r[key] for r in rounds)
+        th[("b", split)] = max([r[key] for r in rounds if r["n"] == N] or [0.0])
+        th[("c", split)] = max(r["n"] * r[key] for r in rounds)
+    for st in D1["null_series"]:
+        fill.append({"E_500": min(r["E"] for r in st["rounds"] if r["n"] >= FROZEN.notice_window),
+                     "E_full": min([r["E"] for r in st["rounds"] if r["n"] == N] or [None])})
+    assert abs(th[("a", "row")] - D1["delta1_row"]) < 1e-15 and abs(th[("a", "ep")] - D1["delta1_ep"]) < 1e-15
+    return th, fill
+
+
+def thr_at(variant, split, n, th):
+    return th[(variant, split)] / n if variant == "c" else th[(variant, split)]
+
+
+def admissible(variant, n, cfg):
+    return n == cfg.buffer_size if variant == "b" else n >= cfg.notice_window
+
+
+def main():
+    cfg = replace(FROZEN, systems=("M3-B",))
+    fit_kw = run._fit_kw(cfg)
+    th, null_fill = thresholds()
+    log(f"Schwellen {{{', '.join(f'{k[0]}/{k[1]}: {v:.5g}' for k, v in th.items())}}}")
+    p1 = run.calibrate_phase1(SEED, cfg, run.train_phase1(SEED, cfg))
+    pg = run.find_p_global(SEED, cfg, p1)["p_global"]
+    prac = list(p1.practice["M3-B"])
+    delta0 = p1.deltas["M3-B"]
+    check = {"practice": prac == [e["cand"] for e in REF["practice"]["M3-B"]],
+             "delta0": abs(delta0 - REF["delta"]["M3-B"]) < 1e-12,
+             "p_global": abs(pg - REF["p_global"]["p_global"]) < 1e-12,
+             "m3_threshold": abs(p1.m3_threshold - REF["calibration"]["m3_threshold"]) < 1e-12}
+    log(f"Phase 1 fertig, Prüfungen {check}")
+    enc = p1.routine.encode
+    deploy = {}
+    for cond in ("none", "red", "global", "walls"):
+        trajs = list(run.stream_episodes(SEED, cfg, p1, pg, cond))
+        rules = {("v2", "row"): {"opened": [], "rounds": []}}
+        rules.update({(v, s): {"opened": [], "rounds": []} for v in VARIANTS for s in SPLITS})
+        noticed, E_500, E_full, traj = None, None, None, []
+        for E, obs, A, D, S, ids in checkpoints(trajs, p1, cfg):
+            n = len(A)
+            if n >= cfg.notice_window and E_500 is None:
+                E_500 = E
+            if n == cfg.buffer_size and E_full is None:
+                E_full = E
+            if noticed is None and n >= cfg.notice_window and float(np.mean(S[-cfg.notice_window:])) > p1.m3_threshold:
+                noticed = E
+            if n < cfg.notice_window:
+                continue
+            Z, F, cache = enc(obs), candidates_B(obs, A), {}
+            # Verlauf mit Basis = Übungs-Ontologie (unabhängig vom Bemerken und von Öffnungen)
+            rec = {"E": E, "n": n}
+            for split in SPLITS:
+                imp, cand = imp_split(Z, A, D, F, prac, E, split, ids, fit_kw)
+                cache[(split, tuple(prac))] = (imp, cand)
+                rec[split] = {CAND_B_NAMES[int(c)]: {"mean": float(imp[k].mean()), "allpos": bool((imp[k] > 0).all())}
+                              for k, c in enumerate(cand)}
+            traj.append(rec)
+            if noticed is None:
+                continue
+            for (variant, split), st in rules.items():
+                if len(st["opened"]) >= cfg.max_open:
+                    continue
+                if variant != "v2" and not admissible(variant, n, cfg):
+                    continue
+                known = prac + [o["cand"] for o in st["opened"]]
+                key = (split, tuple(known))
+                if key not in cache:
+                    cache[key] = imp_split(Z, A, D, F, known, E, split, ids, fit_kw)
+                imp, cand = cache[key]
+                thr = delta0 if variant == "v2" else thr_at(variant, split, n, th)
+                k, g = best_eligible(imp)
+                st["rounds"].append({"E": E, "n": n, "thr": thr, "best": None if k is None else CAND_B_NAMES[int(cand[k])],
+                                     "gain": g, "ratio": g / thr if thr > 0 else None, "n_known": len(known)})
+                c = select_m3(imp, cand, thr)
+                if c is not None:
+                    gain = float(imp[np.flatnonzero(cand == c)[0]].mean())
+                    st["opened"].append({"cand": int(c), "name": CAND_B_NAMES[int(c)], "episode": E, "n": n,
+                                         "gain": gain, "thr": thr, "ratio": gain / thr if thr > 0 else None})
+        ref_open = [(o["cand"], o["episode"]) for o in REF["conditions"][cond]["M3-B"]["opened"]]
+        d1r = D1["deploy"][cond]["rules"]
+        repro = {"noticed_v2": noticed == REF["conditions"][cond]["M3-B"]["noticed"],
+                 "v2": [(o["cand"], o["episode"]) for o in rules[("v2", "row")]["opened"]] == ref_open,
+                 "a_row=D1": [(o["cand"], o["episode"]) for o in rules[("a", "row")]["opened"]]
+                 == [(o["cand"], o["episode"]) for o in d1r["M3_v3_row"]["opened"]],
+                 "a_ep=D1": [(o["cand"], o["episode"]) for o in rules[("a", "ep")]["opened"]]
+                 == [(o["cand"], o["episode"]) for o in d1r["M3_v3_ep"]["opened"]]}
+        deploy[cond] = {"noticed": noticed, "E_500": E_500, "E_full": E_full, "repro": repro,
+                        "rules": {f"{v}_{s}": st for (v, s), st in rules.items()}, "trajectory": traj}
+        log(f"{cond}: bemerkt {noticed}, E_500 {E_500}, E_full {E_full}, Nachbau {repro}; "
+            + "; ".join(f"{v}_{s} {[(o['name'], o['episode']) for o in st['opened']]}" for (v, s), st in rules.items()))
+    out = {"seed": SEED, "check": check, "delta0": delta0, "p_global": pg, "practice": [CAND_B_NAMES[c] for c in prac],
+           "thresholds": {f"{v}_{s}": x for (v, s), x in th.items()}, "null_fill": null_fill, "deploy": deploy,
+           "sec": round(time.time() - t_start)}
+    json.dump(out, open(f"e10_{SEED}.json", "w"), indent=1)
+    log(f"fertig ({out['sec']} s)")
+
+
+main()

@@ -1,0 +1,7 @@
+07:46:33 Schwellen {a/row: 0.0033693, b/row: 0.0033693, c/row: 6.7387, a/ep: 0.0051444, b/ep: 0.0051444, c/ep: 10.289}
+07:48:24 Phase 1 fertig, Prüfungen {'practice': True, 'delta0': True, 'p_global': True, 'm3_threshold': True}
+07:48:55 none: bemerkt None, E_500 30, E_full 120, Nachbau {'noticed_v2': True, 'v2': True, 'a_row=D1': True, 'a_ep=D1': True}; v2_row []; a_row []; a_ep []; b_row []; b_ep []; c_row []; c_ep []
+07:50:00 red: bemerkt 130, E_500 30, E_full 120, Nachbau {'noticed_v2': True, 'v2': True, 'a_row=D1': True, 'a_ep=D1': True}; v2_row [('Farbe 0', 130)]; a_row [('Farbe 0', 130)]; a_ep [('Farbe 0', 140)]; b_row [('Farbe 0', 130)]; b_ep [('Farbe 0', 140)]; c_row [('Farbe 0', 130)]; c_ep [('Farbe 0', 140)]
+07:50:42 global: bemerkt 130, E_500 30, E_full 120, Nachbau {'noticed_v2': True, 'v2': True, 'a_row=D1': True, 'a_ep=D1': True}; v2_row []; a_row []; a_ep []; b_row []; b_ep []; c_row []; c_ep []
+07:51:19 walls: bemerkt 290, E_500 30, E_full 110, Nachbau {'noticed_v2': True, 'v2': True, 'a_row=D1': True, 'a_ep=D1': True}; v2_row [('Farbe 3', 350)]; a_row []; a_ep []; b_row []; b_ep []; c_row []; c_ep []
+07:51:19 fertig (286 s)

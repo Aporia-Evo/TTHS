@@ -403,3 +403,41 @@ Das Bemerken ist in allen drei Varianten unverändert.
 4. **Ist keine Kombination zulässig,** bleibt (a) mit Zeilen, und der Nutzer entscheidet.
 
 E9 (Statistik für S1) ist nicht Teil dieser Auswahl.
+
+## E10: Ergebnis und Variantenwahl (08.10.2026)
+
+Gerechnet nach der vorab festgelegten Regel (Abschnitt oben, Commit `1c02884`) auf den 15 verbrauchten Seeds, mit beiden Teilungen und allen vier Bedingungen. Daten und Einzelheiten: `results/entwicklung_v3/e10/`. Entwicklungsdaten, keine Evidenz.
+
+**Nachbau:** auf allen Seeds und Bedingungen exakt. v2 baut nach, und (a) liefert die D1-Öffnungen.
+
+| Kombination | `red` richtig | Latenz | kleinster Abstand `red` | `global` | `walls`/`none` |
+|---|---|---|---|---|---|
+| (a) Zeilen | 15/15 | 45,3 | 1,09 | 1 | 0/0 |
+| (a) Episoden | 15/15 | 54,0 | 1,06 | 0 | 0/0 |
+| (b) Zeilen | 15/15 | 46,0 | 1,93 | 1 | 0/0 |
+| (b) Episoden | 15/15 | 48,0 | 1,19 | 0 | 0/0 |
+| (c) Zeilen | 15/15 | 44,0 | 1,45 | 1 | 0/0 |
+| (c) Episoden | 15/15 | 48,0 | 1,19 | 0 | 0/0 |
+
+**Weitere Befunde:**
+- **Pufferfüllzeit:** Die Null-Ströme sind voll ab E = 100–150 (Median 130), die Einsatzströme ab E = 110–140 (Median 120).
+- **Latenz:** Sie wird überwiegend vom Bemerken bestimmt. Nur in 2–8 von 15 Seeds liegt die erste Öffnung 10–50 Episoden nach dem Bemerken.
+- **Verlauf von „Farbe 0“ unter `red`** (Basis = Übungs-Ontologie, Zeilen):
+  - erstmals in allen Teilungen positiv bei E = 110–150;
+  - bei E = 200 bei 0,027–0,062;
+  - vor dem Wechsel −0,010 bis 0,0033.
+- **Seed 510, `global`:** Die Öffnung bei E = 110 kommt in allen Zeilen-Varianten vor. Ihr Gewinn steckt schon in den gemeinsamen Daten vor dem Wechsel; das ist ein null-artiger Ausreißer im Rahmen der Grenze von §4.
+
+**Auswahl:**
+- Alle 6 Kombinationen sind zulässig.
+- Den größten kleinsten `red`-Abstand hat (b) Zeilen mit 1,93. Keine andere Kombination liegt innerhalb von 10 % (Grenze 1,73).
+- **Gewählt: E10(b), Teilung nach Zeilen.** E2 bleibt damit unverändert.
+- Eingetragen in Spec v3 §3.3, einheitlich für M3-A und M3-B, sowie in §12.
+
+**Nebenwirkung:** Die Serienkalibrierung von M3-A sinkt auf etwa 10 CPU-h je Seed, vorher etwa 13.
+
+**Festgehalten zur Transparenz:**
+- Die Regel gewichtet den `red`-Abstand vor der Zahl der `global`-Öffnungen.
+- Die Episoden-Varianten hätten Seed 510 vermieden, haben aber kleinere `red`-Abstände (1,06–1,19).
+
+**Offen:** E9.

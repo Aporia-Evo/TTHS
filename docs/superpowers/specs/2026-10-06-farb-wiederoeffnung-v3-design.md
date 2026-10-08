@@ -1,9 +1,9 @@
 # Farbversuch v3: Erklären über die ganze Serie kalibrieren (ENTWURF)
 
-**Status: Entwurf vom 06.10.2026; Entscheidungen E1–E8 des Nutzers vom 07.10.2026 eingetragen (§12).** Nicht eingefroren.
-- Nächster Schritt sind die Entwicklungsprüfungen D1–D3 auf verbrauchten Seeds (§9.0).
-- Ihr Ergebnis kann die Varianten noch ändern, dann nur mit erneuter Entscheidung des Nutzers.
-- Danach folgen der Umsetzungsplan und die Umsetzung.
+**Status: Entwurf vom 06.10.2026.** Nicht eingefroren.
+- Eingetragen sind die Entscheidungen E1–E8 des Nutzers vom 07.10.2026 und E10 vom 08.10.2026 (nach vorab festgelegter Regel). Alle stehen in §12.
+- Die Entwicklungsprüfungen D1–D3 und E10 sind erledigt: `farbversuch/results/entwicklung_v3/`.
+- Offen ist E9 (Statistik für S1). Danach folgen der Umsetzungsplan und die Umsetzung.
 - Kein Lauf auf frischen Seeds ohne ausdrückliche Freigabe.
 
 **Grundlagen:**
@@ -125,12 +125,23 @@ Eine Änderung zur Zeit: v3 ändert die Kalibrierung des Erklärens und sonst ni
 - B_j(E) ist für Strom j nach E abgeschlossenen Episoden: die letzten min(s_j(E), `buffer_size`) Schritte, wobei s_j(E) die Zahl aller Schritte bis dahin ist.
 - Das ist genau der Inhalt des Ringpuffers eines frischen Monitors, der Strom j sieht. Kalibrierung und Einsatz nutzen dieselbe Pufferfunktion.
 
-### 3.3 Zulässige Zeitpunkte
-- 𝓔_j = { E : E mod 10 = 0, 10 ≤ E ≤ 400, s_j(E) ≥ `notice_window` }.
+### 3.3 Zulässige Zeitpunkte (E10(b), gilt gleich für M3-A und M3-B)
+- 𝓔_j = { E : E mod 10 = 0, 10 ≤ E ≤ 400, n_j(E) = `buffer_size` }. Erklärt wird also **nur bei vollem Puffer**, in Kalibrierung und Einsatz gleich. Dabei ist n_j(E) die Zahl der Pufferschritte im Prüfpunkt E.
+- **Einheitlich für M3-A und M3-B:**
+  - Die Regel hängt nur von der Pufferfüllung ab, nicht von der Kandidatenmenge.
+  - Beide Systeme nutzen sie identisch, jedes mit seiner eigenen Schwelle aus der eigenen Null-Serie (eigene Kandidaten, eigene Übungs-Ontologie).
+  - Auch die Teilung ist für beide gleich: nach Zeilen (E2). Die Nebenauswertung nach Episoden läuft nur für M3-B, aus Kostengründen.
+- **Bemerken unverändert:** Fenster 500, ab n ≥ 500.
+  - Bemerkt ein System, bevor der Puffer voll ist, erklärt es erstmals beim ersten Prüfpunkt mit vollem Puffer.
+  - Danach erklärt es bei jedem Prüfpunkt, denn der Puffer bleibt voll.
 - **Unabhängig von Alarm und Wechsel:** 𝓔_j hängt nicht von der Meldeschwelle ab, nicht davon, ob Strom j alarmiert, und nicht von `switch_episode`.
-- **Begründung:** Im Einsatz kann M3 bei jedem Prüfpunkt mit ≥ `notice_window` Pufferschritten bemerken, auch vor dem Wechsel. Danach erklärt es bei jedem späteren Prüfpunkt. 𝓔_j enthält also jeden möglichen Erklärzeitpunkt.
+- **Begründung:** Im Einsatz erklärt M3 nur bei vollem Puffer, nach dem Bemerken aber bei jedem solchen Prüfpunkt. 𝓔_j enthält also jeden möglichen Erklärzeitpunkt.
 - **Warum erzwungen:** Die Meldeschwelle ist das Maximum derselben 20 Null-Ströme. Unter der strikten Regel „>“ überschreitet deshalb kein Kalibrierstrom seine eigene Schwelle. Eine Kalibrierung nur nach einem Alarm hätte keine einzige Runde.
-- **Umfang:** Gemessen an den `none`-Strömen von v2 sind es 37–38 Zeitpunkte je Strom, ab E = 30 oder 40.
+- **Umfang** (Entwicklungsdaten 400–409, 510–514):
+  - Null-Ströme: voll ab E = 100–150, also 26–31 Zeitpunkte je Strom, im Mittel 28,3.
+  - Einsatzströme: voll ab E = 110–140, Median 120.
+- **Warum (b):** Das wurde nach vorab festgelegter Regel aus (a) „ab n ≥ 500“, (b) und (c) „Normierung n · G“ gewählt, jeweils mit beiden Teilungen (§12, E10).
+  - Unter (a) bestimmten frühe Runden mit kleinem Puffer δ₁ und machten die Abstände der richtigen Öffnungen knapp.
 
 ### 3.4 Zulässiger Gewinn je Runde
 - Berechnung: `imp, cand = m3_improvements(Z, A, D, F, K₀, make_rng(seed, CV, E), …)` auf B_j(E), mit den Fit-Parametern des Einsatzes.
@@ -292,9 +303,9 @@ Nach einer ersten Öffnung, insbesondere nach einem echten Treffer unter `red`, 
 - eine Erklärrunde: Median 72,6 s, über 418 Runden im Hauptlauf;
 - δ aus 20 Endpuffern: ≈ 21 min je Seed (Seed 400).
 
-**Serie:** 20 Ströme × 37–38 Runden × 66–72 s ≈ 14–15 CPU-h je Seed.
-- Bestätigung (5 Seeds): ≈ 70–75 CPU-h, ≈ 18–19 h auf 4 Kernen.
-- Hauptlauf (10 Seeds): ≈ 140–150 CPU-h, ≈ 35–38 h auf 4 Kernen.
+**Serie:** Mit E10(b) sind es 20 Ströme × 26–31 Runden bei vollem Puffer. D3 hat 58–74 s je Runde gemessen; Strom 0 von Seed 400 mit 28 Runden brauchte 29,7 min. Das ergibt etwa 10 CPU-h je Seed. Unter (a) wären es etwa 13 CPU-h.
+- Bestätigung (5 Seeds): ≈ 50 CPU-h, ≈ 12–13 h auf 4 Kernen. Nach E4 läuft M3-A dort nicht mit.
+- Hauptlauf (10 Seeds): ≈ 100 CPU-h, ≈ 25–26 h auf 4 Kernen.
 - Dazu kommt der Einsatz von M3-A wie in v2, ≈ 1 CPU-h je Seed.
 
 **Keine Abkürzung über ein gröberes Raster:** Kalibrierung alle 50 Episoden bei Erklären alle 10 im Einsatz hätte weniger Runden, ein kleineres Maximum und damit ein zu kleines δ.
@@ -453,16 +464,16 @@ Alle v2-Tests bleiben. Neu:
 | M3-B, Z2-Tabelle (15 weitere Basen) | ≈ 80 min | wie oben |
 | S1-B, Serie mit 10.000 Permutationen | ≈ 6 min | v2: 0,043 s je Runde mit 1000 |
 | S1-A, Serie | nicht sinnvoll (§7.1) | |
-| M3-A, Serie | ≈ 14–15 CPU-h | §7.2 |
+| M3-A, Serie | ≈ 10 CPU-h (E10(b)) | §7.2, D3 |
 | Rest wie v2 ohne M3-A (Phase 1, Einsatz) | ≈ 3 min | v2, Seed 400: Phase 1 ohne M3-A ≈ 110 s, Einsatz ohne M3-A ≈ 30 s |
 | Rest wie v2 mit M3-A | ≈ 1,5 CPU-h | v2: Seed 400 insgesamt 5265 s |
 
-**Gesamt auf 4 Kernen, nach E4:** Bestätigung ohne M3-A etwa 40 min, Hauptlauf mit M3-A etwa 40 h.
+**Gesamt auf 4 Kernen, nach E4 und E10(b):** Bestätigung ohne M3-A etwa 40 min, Hauptlauf mit M3-A etwa 30 h.
 
 **Zum Vergleich:**
 - **ohne M3-A** (≈ 20 min je Seed): Bestätigung etwa 40 min, Hauptlauf etwa 1 h.
-- **mit M3-A** (≈ 16 CPU-h je Seed): Bestätigung etwa 20 h, Hauptlauf etwa 40 h.
-  - Das setzt voraus, dass der Treiber über Kalibrierströme parallelisiert. Wird wie in v2 nur über Seeds und Bedingungen parallelisiert, dauert die Bestätigung mit 5 Seeds auf 4 Kernen etwa 34 h.
+- **mit M3-A** (≈ 11,5 CPU-h je Seed unter E10(b), ≈ 14,5 unter (a)): Bestätigung etwa 15 h, Hauptlauf etwa 30 h.
+  - Das setzt voraus, dass der Treiber über Kalibrierströme parallelisiert. Wird wie in v2 nur über Seeds und Bedingungen parallelisiert, dauert ein Lauf mit 5 Seeds auf 4 Kernen etwa doppelt so lang.
 
 Dazu kommen Umsetzung mit Tests, Entwicklungsprüfungen (D1 ≈ 1–1,5 h auf 4 Kernen für 15 Seeds), Einfrieren und Bericht.
 
@@ -480,6 +491,8 @@ Dazu kommen Umsetzung mit Tests, Entwicklungsprüfungen (D1 ≈ 1–1,5 h auf 4 
 | E6 | Entwicklungsprüfungen D1–D3 | freigegeben |
 | E7 | Seeds | Bestätigung 520–524, Hauptlauf 600–609 |
 | E8 | Trefferdefinition S1 | S1 öffnet höchstens ein Merkmal je Runde |
+| E9 | Statistik für S1 | **offen**: z-Statistik statt Holm-p (Entwicklungsbefund D2) |
+| E10 | Kleine Puffer | **(b) erst bei vollem Puffer erklären, Teilung nach Zeilen**. Gewählt am 08.10.2026 nach der vorab festgelegten Auswahlregel (PROTOKOLL, Commit `1c02884`), auf Auftrag des Nutzers. Gilt gleich für M3-A und M3-B (§3.3). Begründung und Daten: `farbversuch/results/entwicklung_v3/e10/` |
 
 ---
 
