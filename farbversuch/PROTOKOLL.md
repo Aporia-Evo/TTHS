@@ -368,3 +368,38 @@ Freigegeben mit E6. Gerechnet auf den verbrauchten Seeds 400–409 und 510–514
 - E9: S1 auf der z-Statistik statt auf Holm-p.
 - E10: Umgang mit kleinen Puffern: so lassen, erst bei vollem Puffer erklären, oder den Gewinn auf die Puffergröße normieren.
 - E2 erneut ansehen, angesichts von Seed 510.
+
+## E10: Auswahlregel, festgelegt vor dem Rechnen (08.10.2026)
+
+Auftrag des Nutzers vom 08.10.2026:
+- E10(b) und E10(c) auf allen 15 verbrauchten Seeds nachrechnen, mit beiden Teilungen und allen vier Bedingungen. Die bisherige Regel (a) bleibt Referenz.
+- Dazu werden berichtet: Pufferfüllzeit, erste Öffnung, Latenz seit dem Wechsel und der Verlauf des richtigen Kandidaten bei unveränderter Übungs-Ontologie.
+- E10 wird für M3-A und M3-B einheitlich spezifiziert.
+- Es kommen keine weiteren Varianten dazu, und es werden keine frischen Seeds benutzt.
+
+**Varianten**, jeweils in Kalibrierung und Einsatz gleich. n ist die Zahl der Pufferschritte im Prüfpunkt:
+
+| Variante | Erklären bei | Statistik | Schwelle | Öffnen, wenn (alle Teilungen > 0 und) |
+|---|---|---|---|---|
+| (a) | n ≥ 500 | G | δ₁ = Maximum von G über Runden und Ströme | Mittel > δ₁ |
+| (b) | nur bei vollem Puffer, n = 2000 | G | δ₁ = Maximum von G über diese Runden | Mittel > δ₁ |
+| (c) | n ≥ 500 | n · G | κ₁ = Maximum von n · G | n · Mittel > κ₁, also Mittel > κ₁/n |
+
+Das Bemerken ist in allen drei Varianten unverändert.
+
+**Auswahlregel.** Gewählt wird unter den 6 Kombinationen aus Variante und Teilung, nur auf den 15 Entwicklungs-Seeds, bewertet nach Spec v3 §8 (erste Öffnung):
+1. **Zulässig** ist eine Kombination nur mit:
+   - `red` richtig in mindestens 14/15 Seeds;
+   - `global` mit Öffnung in höchstens 1/15;
+   - `walls` mit Öffnung in höchstens 1/15;
+   - `none` mit Öffnung in 0/15.
+2. **Unter den zulässigen gewinnt der größte kleinste Abstand** der richtigen ersten Öffnung unter `red`. Abstand heißt: Gewinn geteilt durch die Schwelle in der Öffnungsrunde, gemessen wird das Minimum über die Seeds.
+3. **Gleichstand innerhalb von 10 %** des besten Werts aus Schritt 2 wird nacheinander so aufgelöst:
+   - weniger Öffnungen unter `global`;
+   - kleinerer größter Abstand unter `global`, also bester Gewinn geteilt durch die Schwelle, maximal über Seeds und Runden;
+   - kleinere mittlere Latenz unter `red`;
+   - Zeilen vor Episoden;
+   - (a) vor (c) vor (b).
+4. **Ist keine Kombination zulässig,** bleibt (a) mit Zeilen, und der Nutzer entscheidet.
+
+E9 (Statistik für S1) ist nicht Teil dieser Auswahl.
