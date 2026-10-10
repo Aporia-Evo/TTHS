@@ -3,7 +3,7 @@
 **Status: Entwurf vom 06.10.2026.** Nicht eingefroren.
 - Eingetragen sind die Entscheidungen E1–E8 des Nutzers vom 07.10.2026 und E10 vom 08.10.2026 (nach vorab festgelegter Regel). Alle stehen in §12.
 - Die Entwicklungsprüfungen D1–D3 und E10 sind erledigt: `farbversuch/results/entwicklung_v3/`.
-- Offen ist E9 (Statistik für S1). Danach folgen der Umsetzungsplan und die Umsetzung.
+- E9 hat der Nutzer am 10.10.2026 entschieden: z-Statistik für S1. Damit sind alle Entscheidungen getroffen; als Nächstes folgen der Umsetzungsplan und die Umsetzung.
 - Kein Lauf auf frischen Seeds ohne ausdrückliche Freigabe.
 
 **Grundlagen:**
@@ -96,10 +96,10 @@ Abstände zur Schwelle, je Teilung mit eigener Schwelle:
 
 **Ändert sich (Kern):**
 - **K1:** Die Mindestverbesserung δ von M3 wird über die ganze Erklärserie kalibriert (§3), für die erste Öffnung.
-- **K2:** Die Schwelle von S1 wird ebenso über die Serie kalibriert, auf dem Holm-adjustierten p-Wert (§7.1).
+- **K2:** Die Schwelle von S1 wird ebenso über die Serie kalibriert, auf dem standardisierten Unterschied z (E9, §7.1).
 - **K3:** Zusatzöffnungen werden ausdrücklich behandelt (§5, Entscheidung E3).
-- **K4:** Die Permutationszahl von S1-B steigt von 1000 auf 10.000, damit die Serienschwelle auflösbar ist (§7.1).
-- **K5:** S1 öffnet höchstens ein Merkmal je Runde, das erste in Holm-Reihenfolge (E8, §8). Damit gilt für M3 und S1 dieselbe Trefferdefinition.
+- **K4** (entfällt mit E9): Geplant war, die Permutationszahl von S1-B auf 10.000 zu erhöhen. Mit der z-Statistik braucht das Erklären von S1 keine Permutationen mehr; das Vor-Öffnen bleibt bei 1000.
+- **K5:** S1 öffnet höchstens ein Merkmal je Runde, das mit dem größten z (E8, E9, §7.1, §8). Damit gilt für M3 und S1 dieselbe Trefferdefinition.
 
 **Bleibt wie in v2 (eingefroren `b9589ce`):**
 - Welt, Bedingungen, Wechsel bei Episode 100, 400 Episoden;
@@ -269,31 +269,43 @@ Nach einer ersten Öffnung, insbesondere nach einem echten Treffer unter `red`, 
 
 ## 7. Vergleichssysteme
 
-### 7.1 S1: Serienstatistik auf dem Holm-adjustierten p-Wert
+### 7.1 S1: Serienstatistik auf dem standardisierten Unterschied z (E9)
 
-**Je Runde E:**
-- Es gibt einseitige Permutations-p-Werte p_c wie in v2 für die m Kandidaten außerhalb von K₀. Der Zufallsschlüssel ist `make_rng(seed, PERM, E)` wie im Einsatz.
-- Holm-adjustiert: p̃_(i) = max über k ≤ i von min(1, (m − k + 1) · p_(k)).
-- Rundenstatistik: Q_j(E) = min_c p̃_c = min(1, m · p_(1)).
+**Je Runde E**, auf dem Puffer B(E) mit n Schritten und der Überraschung S je Schritt:
+- Für jeden Kandidaten c außerhalb der bekannten Merkmale K gilt k₁ = Zahl der Schritte mit F_c = 1 und k₀ = n − k₁.
+- Der standardisierte Unterschied ist
+
+  z_c = (Mittel von S bei F_c = 1 − Mittel von S bei F_c = 0) / sd_c,  mit sd_c² = n² σ² / (k₁ k₀ (n − 1)).
+
+  - σ² ist die Varianz von S im Puffer (ddof = 0).
+  - sd_c ist genau die Standardabweichung dieses Unterschieds unter zufälliger Vertauschung der Zeilen. Permutationen braucht es nicht.
+- Kandidaten mit k₁ = 0 oder k₀ = 0 bekommen kein z. Bei σ = 0 ist z_c = 0.
+- Rundenstatistik: Z_j(E) = max_c z_c. Bei Gleichstand gilt der kleinste Kandidatenindex.
 
 **Zeitpunkte:**
-- Erklärt wird in v2 nach dem CUSUM-Alarm bei jedem Prüfpunkt, ohne Mindestfüllung des Puffers. Für S1 ist 𝓔 deshalb = {10, 20, …, 400}.
+- Erklärt wird wie in v2 nach dem CUSUM-Alarm bei jedem Prüfpunkt, ohne Mindestfüllung des Puffers. Für S1 ist 𝓔 deshalb {10, 20, …, 400}.
+- E10 betrifft nur M3.
 - Die CUSUM-Schwelle ist ebenfalls das Maximum derselben 20 Ströme. Deshalb wird auch hier erzwungen erklärt.
 
-**Schwelle:** T_j = min_E Q_j(E), und α₁ = min_j T_j.
+**Schwelle:** T_j = max_E Z_j(E) mit Basis K₀ = Übungs-Ontologie von S1. Daraus z₁ = max_j T_j.
 
 **Einsatz:**
-- Abgelehnt, also geöffnet, wird c genau dann, wenn p̃_c < α₁ (strikt). Das ist Holm auf Stufe α₁ mit strikter Ungleichung.
+- Geöffnet wird der Kandidat mit dem größten z, genau dann, wenn z > z₁ (strikt).
 - Höchstens ein Merkmal je Runde (E8), insgesamt höchstens 3 wie in v2.
-- Kalibriert und entschieden wird auf derselben Größe. Rohes Minimum und Holm werden nicht gemischt.
+- Kalibriert und entschieden wird auf derselben Größe.
+- Die Kandidatenkorrektur steckt im Maximum über die Kandidaten. Die Serienkalibrierung deckt damit Kandidaten und Runden zugleich ab.
 
-**Auflösung:** Es gilt p ≥ 1/(n_perm + 1), also Q ≥ m/(n_perm + 1).
-- **S1-B** (m ≤ 6): Mit 1000 Permutationen liegt die Untergrenze bei 0,006, nahe an der erwarteten Schwelle. Deshalb `n_perm` = 10.000, Untergrenze 0,0006.
-- **S1-A** (m ≈ 1190): Mit 25.000 Permutationen liegt die Untergrenze bei 0,048. Eine Serienschwelle ist damit nicht sinnvoll; dafür bräuchte es etwa 10⁶ Permutationen je Runde.
-  - Gewählt (E5): S1-A läuft in v3 mit der unkalibrierten v2-Regel mit und wird nur beschreibend berichtet, ausdrücklich als unkalibriert gekennzeichnet.
-  - Keine Vorhersage hängt an S1-A.
+**Warum nicht der Holm-adjustierte p-Wert** (ursprünglicher Entwurf, verworfen mit E9):
+- In D2 lag der kleinste adjustierte Permutations-p-Wert in 11–20 von 20 Null-Strömen auf der Untergrenze m/(n_perm + 1).
+- Die Schwelle α₁ war damit unerreichbar, und S1 öffnete nie, auch unter `red` nicht (0/15).
+- Die z-Werte auf den Null-Strömen erreichen 6,2–9,7. Die zeilenweisen Permutationstests von S1 sind unter der Nullhypothese also stark zu optimistisch. Nur eine Größe ohne Untergrenze lässt sich über die Serie sinnvoll kalibrieren.
+- **Entwicklungsbefund D2** auf 15 verbrauchten Seeds: `red` 14/15 richtig, `global`, `walls` und `none` je 0 (`farbversuch/results/entwicklung_v3/`).
 
-**Grenze:** Für die erste Öffnung von S1 gilt dieselbe Grenze und dieselbe Reichweite wie in §4.
+**Unverändert:**
+- Das Vor-Öffnen von S1, also seine Übungs-Ontologie, bleibt beim v2-Permutationstest mit Holm (`n_perm` 1000).
+- **S1-A** (E5) läuft mit der unkalibrierten v2-Regel mit und wird nur beschreibend berichtet, ausdrücklich als unkalibriert gekennzeichnet. Keine Vorhersage hängt an S1-A.
+
+**Grenze:** Für die erste Öffnung von S1 gilt dieselbe Grenze und dieselbe Reichweite wie in §4. T ist eine feste Funktion des Stroms, und Kalibrierung und Einsatz nutzen dieselbe Größe.
 
 ### 7.2 M3-A: Kosten der vollen Serienkalibrierung
 
@@ -337,7 +349,7 @@ Hauptlauf: Seeds 600–609. Die Schwellen sind wie in v2, damit beide vergleichb
 - **Treffer unter `red`:** Die erste Öffnung des Stroms ist das richtige Merkmal (wie v2 §6) und liegt bei E > 100.
   - Eine erste Öffnung vor dem Wechsel ist kein Treffer.
   - **M3 und S1 werden mit derselben Definition bewertet** (E8). S1 kann in v2 bis zu 3 Merkmale in einer Runde öffnen. „Treffer, wenn das richtige Merkmal unter den Öffnungen der ersten Runde ist“ wäre für S1 nachsichtiger als für M3 und würde P5 verzerren. Gewählt ist die erste der beiden Varianten:
-    - **S1 öffnet höchstens ein Merkmal je Runde (gewählt, E8):** das erste in Holm-Reihenfolge, also kleinster p-Wert, dann größte Differenz, dann kleinster Index. „Erste Öffnung“ ist dann für beide Verfahren ein einzelnes Merkmal. §4 bleibt gültig, weil eine erste Öffnung weiter jede Ablehnung voraussetzt.
+    - **S1 öffnet höchstens ein Merkmal je Runde (gewählt, E8):** mit E9 das Merkmal mit dem größten z (§7.1). „Erste Öffnung“ ist dann für beide Verfahren ein einzelnes Merkmal. §4 bleibt gültig.
     - *Verworfen:* **S1 wie v2.** Treffer nur, wenn das richtige Merkmal in der ersten Runde in Holm-Reihenfolge vorn liegt. Die übrigen Merkmale dieser Runde zählen als falsche erste Öffnungen.
   - Treffer, erste Öffnung und Latenz bestimmt für alle Systeme **eine einzige Auswertungsfunktion** (Test T8).
 - **Falsche erste Öffnung:**
@@ -356,7 +368,7 @@ Hauptlauf: Seeds 600–609. Die Schwellen sind wie in v2, damit beide vergleichb
 **Pflichtangaben, nur beschreibend:**
 - Öffnungen unter `none` (Erwartung nach §4: höchstens 1/21 je Seed) und unter `walls`;
 - Zusatzöffnungen;
-- δ₁, α₁ und Gewinn/δ₁ jeder Öffnung;
+- δ₁, z₁, Gewinn/δ₁ jeder M3-Öffnung und z/z₁ jeder S1-Öffnung;
 - die Nebenauswertung mit Teilung nach Episoden;
 - Latenzen und Kosten.
 
@@ -434,10 +446,13 @@ Alle v2-Tests bleiben. Neu:
 - **T4 Schwelle:**
   - δ₁ = Maximum der T_j. Die strikte Regel „>“ gilt; δ₁ = 0 ist möglich.
   - Ein Kandidat mit Mittel = δ₁ öffnet nicht.
-- **T5 S1:**
-  - Die Holm-Adjustierung ist monoton und auf 1 begrenzt.
-  - min p̃ = min(1, m · p_(1)).
-  - Die Entscheidung „p̃ < α₁“ ist gleich `holm_select` auf Stufe α₁ mit strikter Ungleichung.
+- **T5 S1 (z-Statistik):**
+  - sd_c stimmt mit der Standardabweichung des Unterschieds über viele zufällige Vertauschungen überein (Monte-Carlo-Vergleich).
+  - Kandidaten mit k₁ = 0 oder k₀ = 0 bekommen kein z.
+  - Bei Gleichstand öffnet der kleinste Index.
+  - z = z₁ öffnet nicht (strikt).
+  - Bekannte Merkmale werden nicht getestet.
+  - Je Runde höchstens eine Öffnung.
 - **T6 Kalibrierung austauschbarer Ströme** (synthetisch, `slow`): Mit 21 austauschbaren synthetischen Strömen liegt die Überschreitungsrate über viele Wiederholungen bei ≤ 1/21 (Binomialtoleranz).
 - **T7 Pflichtprüfung:** `n_null_episodes != n_deploy_episodes` ergibt einen Fehler.
 - **T8 Bewertung Z3:**
@@ -462,7 +477,7 @@ Alle v2-Tests bleiben. Neu:
 | M3-B, Serie, eine Teilung | ≈ 20 × 38 × 0,42 s ≈ 5 min | v2: Median 0,41 s je Runde |
 | M3-B, Nebenauswertung nach Episoden | ≈ 5 min | wie oben |
 | M3-B, Z2-Tabelle (15 weitere Basen) | ≈ 80 min | wie oben |
-| S1-B, Serie mit 10.000 Permutationen | ≈ 6 min | v2: 0,043 s je Runde mit 1000 |
+| S1-B, Serie mit der z-Statistik | wenige Sekunden | geschlossene Formel, keine Permutationen |
 | S1-A, Serie | nicht sinnvoll (§7.1) | |
 | M3-A, Serie | ≈ 10 CPU-h (E10(b)) | §7.2, D3 |
 | Rest wie v2 ohne M3-A (Phase 1, Einsatz) | ≈ 3 min | v2, Seed 400: Phase 1 ohne M3-A ≈ 110 s, Einsatz ohne M3-A ≈ 30 s |
@@ -491,7 +506,7 @@ Dazu kommen Umsetzung mit Tests, Entwicklungsprüfungen (D1 ≈ 1–1,5 h auf 4 
 | E6 | Entwicklungsprüfungen D1–D3 | freigegeben |
 | E7 | Seeds | Bestätigung 520–524, Hauptlauf 600–609 |
 | E8 | Trefferdefinition S1 | S1 öffnet höchstens ein Merkmal je Runde |
-| E9 | Statistik für S1 | **offen**: z-Statistik statt Holm-p (Entwicklungsbefund D2) |
+| E9 | Statistik für S1 | z-Statistik, über die Serie kalibriert, statt Holm-p (Nutzer, 10.10.2026; Entwicklungsbefund D2) |
 | E10 | Kleine Puffer | **(b) erst bei vollem Puffer erklären, Teilung nach Zeilen**. Gewählt am 08.10.2026 nach der vorab festgelegten Auswahlregel (PROTOKOLL, Commit `1c02884`), auf Auftrag des Nutzers. Gilt gleich für M3-A und M3-B (§3.3). Begründung und Daten: `farbversuch/results/entwicklung_v3/e10/` |
 
 ---

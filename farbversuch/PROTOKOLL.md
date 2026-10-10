@@ -441,3 +441,15 @@ Gerechnet nach der vorab festgelegten Regel (Abschnitt oben, Commit `1c02884`) a
 - Die Episoden-Varianten hätten Seed 510 vermieden, haben aber kleinere `red`-Abstände (1,06–1,19).
 
 **Offen:** E9.
+
+## E9: Statistik für S1 (10.10.2026)
+
+**Entscheidung des Nutzers:** S1-B läuft in v3 auf dem standardisierten Unterschied z, über die Serie kalibriert (z₁ = Maximum der 20 Null-Ströme), nicht auf dem Holm-adjustierten p-Wert. Es öffnet höchstens ein Merkmal je Runde, das mit dem größten z, und nur bei z > z₁.
+
+**Grund** (Entwicklungsbefund D2):
+- Der Holm-p-Wert liegt auf den Null-Strömen meist an der Untergrenze der Permutationen. S1 hätte nie geöffnet (`red` 0/15).
+- Die z-Statistik: `red` 14/15, `global`, `walls` und `none` je 0.
+
+**Unverändert bleiben** das Vor-Öffnen von S1 (v2-Permutationstest, 1000 Permutationen) und S1-A, unkalibriert und nur beschreibend (E5).
+
+Eingetragen in Spec v3 §7.1, §10 und §12. Damit sind E1–E10 entschieden. Als Nächstes folgt der Umsetzungsplan.

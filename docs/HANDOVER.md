@@ -17,7 +17,7 @@ Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf d
   - v3-Entwurf, nicht freigegeben: `docs/superpowers/specs/2026-10-06-farb-wiederoeffnung-v3-design.md`.
   - Die Entscheidungen E1–E8 (07.10.2026) und E10 (08.10.2026, Variante (b) nach vorab festgelegter Regel) stehen in dessen §12.
   - Entwicklungsprüfungen D1–D3 und E10: `farbversuch/results/entwicklung_v3/`.
-  - Offen ist E9 (Statistik für S1), danach folgt der Umsetzungsplan.
+  - E9 (10.10.2026): S1 läuft auf der z-Statistik. Damit sind alle Entscheidungen getroffen; als Nächstes folgt der Umsetzungsplan.
   - Bis zur Freigabe gilt: keine Umsetzung, keine Läufe auf frischen Seeds (vorgesehen 520–524 und 600–609), kein Einfrieren.
 
 Die folgenden Punkte beschreiben den Stand vor dem Hauptlauf und bleiben als Referenz stehen.
