@@ -1,10 +1,15 @@
-# Handover Farbversuch (Stand 06.10.2026: Hauptlauf 400–409 und Bericht abgeschlossen)
+# Handover Farbversuch (Stand 10.10.2026: abgeschlossen, v3 zurückgestellt)
 
 Für die nächste Claude-Sitzung. Dieses Dokument soll genügen, um ohne weitere Vorgeschichte weiterzuarbeiten. Hintergrund in `docs/PROJEKTBESCHREIBUNG.md`, alle Läufe und Änderungen in `farbversuch/PROTOKOLL.md`.
 
 Repo `aporia-evo/tths`, Branch `claude/dreamy-wozniak-7xt321`. Es wird nur auf diesem Branch gearbeitet.
 
 ## Kurzfassung
+
+**Farbversuch abgeschlossen (10.10.2026, Entscheidung des Nutzers).** Abschlussvermerk: `farbversuch/ABSCHLUSS.md`.
+- v3 ist vollständig spezifiziert, aber nicht umgesetzt (zurückgestellt).
+- Fortsetzung als v4 in einem kleinen Transformer, mit eigenem Design.
+
 
 **Hauptlauf abgeschlossen (06.10.2026).** Eingefroren mit Commit `b9589ce`, Hauptlauf 400–409 ohne Unterbrechung, `freeze verify` OK.
 - **Vorregistriertes Ergebnis** (`farbversuch/results/main_report.md`, PROTOKOLL „Hauptlauf 400–409“):

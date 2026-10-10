@@ -1,6 +1,8 @@
 # Farbversuch v3: Erklären über die ganze Serie kalibrieren (ENTWURF)
 
-**Status: Entwurf vom 06.10.2026.** Nicht eingefroren.
+**Status: zurückgestellt (10.10.2026).** Der Farbversuch ist auf Entscheidung des Nutzers abgeschlossen (`farbversuch/ABSCHLUSS.md`). Dieser Entwurf ist vollständig entschieden, aber nicht umgesetzt; er bleibt als Option liegen.
+
+**Entwurf vom 06.10.2026.** Nicht eingefroren.
 - Eingetragen sind die Entscheidungen E1–E8 des Nutzers vom 07.10.2026 und E10 vom 08.10.2026 (nach vorab festgelegter Regel). Alle stehen in §12.
 - Die Entwicklungsprüfungen D1–D3 und E10 sind erledigt: `farbversuch/results/entwicklung_v3/`.
 - E9 hat der Nutzer am 10.10.2026 entschieden: z-Statistik für S1. Damit sind alle Entscheidungen getroffen; als Nächstes folgen der Umsetzungsplan und die Umsetzung.

@@ -453,3 +453,10 @@ Gerechnet nach der vorab festgelegten Regel (Abschnitt oben, Commit `1c02884`) a
 **Unverändert bleiben** das Vor-Öffnen von S1 (v2-Permutationstest, 1000 Permutationen) und S1-A, unkalibriert und nur beschreibend (E5).
 
 Eingetragen in Spec v3 §7.1, §10 und §12. Damit sind E1–E10 entschieden. Als Nächstes folgt der Umsetzungsplan.
+
+## Abschluss (10.10.2026)
+
+Der Nutzer hat den Farbversuch abgeschlossen. Sein Ziel ist ein generalisierendes System ähnlich einem Sprachmodell; die Frage soll in einem kleinen Transformer weitergeführt werden (v4, eigenes Design).
+- **v3** ist vollständig spezifiziert (E1–E10), aber nicht umgesetzt und zurückgestellt.
+- **Abschlussvermerk:** `ABSCHLUSS.md`.
+- **Seeds:** 520–524 und 600–609 bleiben unbenutzt.

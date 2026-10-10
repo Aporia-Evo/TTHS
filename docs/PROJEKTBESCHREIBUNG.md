@@ -1,4 +1,4 @@
-# Farbversuch – Projektbeschreibung (Stand 06.10.2026: v2, Hauptlauf abgeschlossen)
+# Farbversuch – Projektbeschreibung (Stand 10.10.2026: abgeschlossen, siehe `farbversuch/ABSCHLUSS.md`)
 
 Bindend sind die Spezifikation v2 (`docs/superpowers/specs/2026-10-03-farb-wiederoeffnung-v2-design.md`) und der Plan v2 (`docs/superpowers/plans/2026-10-03-farb-wiederoeffnung-v2.md`). Die Dokumente der Version 1 (`…-farb-wiederoeffnung-design.md`, `…-farb-wiederoeffnung.md`) sind Geschichte. Anhang A der Spec v2 nennt, was sich gegenüber v1 geändert hat und warum. Der Plan v2 verweist für alles, was er nicht neu regelt, auf die Festlegungen des v1-Plans. Anhang B der Spec v2 ist ein datierter Review-Nachtrag vom 05.10.2026. Er präzisiert Kalibrierung, Grenzen und Auswertung und ändert keine Regel.
 
